@@ -1,4 +1,13 @@
 #!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../../.."  # cd into API-Based-Agent/
+
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
 AGENT="CodeActAgent"
 
 # IMPORTANT: Because Agent's prompt changes fairly often in the rapidly evolving codebase of OpenDevin
@@ -9,10 +18,8 @@ export log_file='log.log'
 COMMAND="poetry run python evaluation/webarena/run_infer.py \
   --agent-cls CodeActAgent \
   --llm-config llm \
-  -m openai/gpt-4o
   -e SSH_PASSWORD='"hello"'
-  --start_task_id 0 \
-  --eval-n-limit 1 \
+  --start_task_id 27 \
   --max-iterations 18 \
   --data-split validation \
   --max-chars 10000000 \

@@ -99,7 +99,7 @@ class JupyterKernel:
 
         client = AsyncHTTPClient()
         if not self.kernel_id:
-            n_tries = 5
+            n_tries = 60
             while n_tries > 0:
                 try:
                     response = await client.fetch(
@@ -113,7 +113,7 @@ class JupyterKernel:
                 except Exception:
                     # kernels are not ready yet
                     n_tries -= 1
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2)
 
             if n_tries == 0:
                 raise ConnectionRefusedError('Failed to connect to kernel')

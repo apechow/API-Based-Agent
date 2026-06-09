@@ -110,9 +110,7 @@ def get_api_documentation_shopping(
 ):
     file = 'shopping-admin.json'
     output = {}
-    output['server_url'] = (
-        'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7780/rest/default'
-    )
+    output['server_url'] = f'{os.environ.get("SHOPPING_ADMIN_REST", "")}/rest/default'
     paths = {}
     components = {}
     with open(file, 'r') as f:
@@ -162,7 +160,7 @@ def get_api_documentation_shopping(
                 if component not in components:
                     components[component] = data['components']['schemas'][component]
                     new = True
-        if new == False:
+        if not new:
             break
     output['paths'] = paths
     output['components'] = components
@@ -245,191 +243,271 @@ def get_api_documentation_map(api: str) -> str:
     api_doc = ''.join(f[api_start_index:api_end_index])
     return title + api_doc
 
-from bs4 import BeautifulSoup
-import requests
 
-BASE_URL = "http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999"
+import requests  # noqa: E402
+from bs4 import BeautifulSoup  # noqa: E402
+
+BASE_URL = os.environ.get('REDDIT', '')
 # create a session and login
 s = requests.Session()
-r = s.get(f"{BASE_URL}/login")
+r = s.get(f'{BASE_URL}/login')
 soup = BeautifulSoup(r.content, 'html.parser')
 csrf_token = soup.find('input', attrs={'name': '_csrf_token'})['value']
 
-payload = {'_csrf_token': csrf_token ,'_username':'MarvelsGrantMan136', '_password':'test1234', '_remember_me': 'on'}
+payload = {
+    '_csrf_token': csrf_token,
+    '_username': 'MarvelsGrantMan136',
+    '_password': 'test1234',
+    '_remember_me': 'on',
+}
 
-s.post(f"{BASE_URL}/login_check", data=payload)
+s.post(f'{BASE_URL}/login_check', data=payload)
+
 
 # APIs regarding subscriptions
 def subscribe_forum(forum_name):
     # forum_name: str, forum_name, e.g. "relationship_advice"
-    r = s.get(f"{BASE_URL}/f/{forum_name}")
+    r = s.get(f'{BASE_URL}/f/{forum_name}')
     soup = BeautifulSoup(r.content, 'html.parser')
 
-    csrf_token = soup.find('form', {'class': 'subscribe-form'}).find('input', attrs={'name': 'token'})['value']
+    csrf_token = soup.find('form', {'class': 'subscribe-form'}).find(
+        'input', attrs={'name': 'token'}
+    )['value']
 
-    r = s.post(f"{BASE_URL}/f/{forum_name}/subscribe.json", files=dict(token=(None, csrf_token)))
+    r = s.post(
+        f'{BASE_URL}/f/{forum_name}/subscribe.json',
+        files=dict(token=(None, csrf_token)),
+    )
     return r.json()
+
 
 def unsubscribe_forum(forum_name):
     # forum_name: str, forum_name, e.g. "relationship_advice"
-    r = s.get(f"{BASE_URL}/f/{forum_name}")
+    r = s.get(f'{BASE_URL}/f/{forum_name}')
     soup = BeautifulSoup(r.content, 'html.parser')
 
-    csrf_token = soup.find('form', {'class': 'subscribe-form'}).find('input', attrs={'name': 'token'})['value']
+    csrf_token = soup.find('form', {'class': 'subscribe-form'}).find(
+        'input', attrs={'name': 'token'}
+    )['value']
 
-    r = s.post(f"{BASE_URL}/f/{forum_name}/unsubscribe.json", files=dict(token=(None, csrf_token)))
+    r = s.post(
+        f'{BASE_URL}/f/{forum_name}/unsubscribe.json',
+        files=dict(token=(None, csrf_token)),
+    )
     return r.json()
+
 
 # APIs regarding voting submissions
 def get_submission_votes(submission_id):
     # submission_id: int, submission id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    votes = int(soup.find('span', {'class': 'vote__net-score'}).contents[0].replace('−', '-'))
+    votes = int(
+        soup.find('span', {'class': 'vote__net-score'}).contents[0].replace('−', '-')
+    )
     return votes
+
 
 def upvote_submission(submission_id):
     # submission_id: int, submission id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'data-vote-route-value': 'submission_vote'}).find('input', attrs={'name': 'token'})['value']
+    csrf_token = soup.find(
+        'form', attrs={'data-vote-route-value': 'submission_vote'}
+    ).find('input', attrs={'name': 'token'})['value']
 
-    r = s.post(f"{BASE_URL}/sv/{submission_id}.json", files=dict(token=(None, csrf_token), choice=(None, 1)))
+    r = s.post(
+        f'{BASE_URL}/sv/{submission_id}.json',
+        files=dict(token=(None, csrf_token), choice=(None, 1)),
+    )
     return r.json()
+
 
 def downvote_submission(submission_id):
     # submission_id: int, submission id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'data-vote-route-value': 'submission_vote'}).find('input', attrs={'name': 'token'})['value']
+    csrf_token = soup.find(
+        'form', attrs={'data-vote-route-value': 'submission_vote'}
+    ).find('input', attrs={'name': 'token'})['value']
 
-    r = s.post(f"{BASE_URL}/sv/{submission_id}.json", files=dict(token=(None, csrf_token), choice=(None, -1)))
+    r = s.post(
+        f'{BASE_URL}/sv/{submission_id}.json',
+        files=dict(token=(None, csrf_token), choice=(None, -1)),
+    )
     return r.json()
+
 
 def unvote_submission(submission_id):
     # submission_id: int, submission id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'data-vote-route-value': 'submission_vote'}).find('input', attrs={'name': 'token'})['value']
+    csrf_token = soup.find(
+        'form', attrs={'data-vote-route-value': 'submission_vote'}
+    ).find('input', attrs={'name': 'token'})['value']
 
-    r = s.post(f"{BASE_URL}/sv/{submission_id}.json", files=dict(token=(None, csrf_token), choice=(None, 0)))
+    r = s.post(
+        f'{BASE_URL}/sv/{submission_id}.json',
+        files=dict(token=(None, csrf_token), choice=(None, 0)),
+    )
     return r.json()
+
 
 def get_all_comments():
-    r = s.get("http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/api/comments", headers={"X-Experimental-API":"1"})
+    r = s.get(f'{BASE_URL}/api/comments', headers={'X-Experimental-API': '1'})
     return r.json()
+
 
 def get_comment_by_id(comment_id):
     # comment_id: int, comment id
-    r = s.get(f"http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/api/comments/{comment_id}", headers={"X-Experimental-API":"1"})
+    r = s.get(
+        f'{BASE_URL}/api/comments/{comment_id}', headers={'X-Experimental-API': '1'}
+    )
     return r.json()
 
+
 def update_comment_by_id(comment_id, new_comment_content):
-    comment_update_url = f"http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/api/comments/{comment_id}"
-    updated_comment_data = {
-        "renderedBody": new_comment_content
-    }
+    comment_update_url = f'{BASE_URL}/api/comments/{comment_id}'
+    updated_comment_data = {'renderedBody': new_comment_content}
     headers = {
-        "X-Experimental-API": "1",
-        "Content-Type": "application/json",
+        'X-Experimental-API': '1',
+        'Content-Type': 'application/json',
     }
     data_payload = updated_comment_data
-    response = s.put(comment_update_url, cookies=s.cookies, headers=headers, json=data_payload)
+    response = s.put(
+        comment_update_url, cookies=s.cookies, headers=headers, json=data_payload
+    )
     return response.text
+
 
 # APIs regarding voting comments under a submission
 def get_comment_votes(submission_id, comment_id):
     # submission_id: int, submission id
     # comment_id: int, comment id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     redir_url = r.url.rsplit('/', 1)[0]
 
-    r = s.get(f"{redir_url}/-/comment/{comment_id}")
+    r = s.get(f'{redir_url}/-/comment/{comment_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    votes = int(soup.find('form', attrs={'data-vote-route-value': 'comment_vote'}).find('span', {'class': 'vote__net-score'}).contents[0].replace('−', '-'))
+    votes = int(
+        soup.find('form', attrs={'data-vote-route-value': 'comment_vote'})
+        .find('span', {'class': 'vote__net-score'})
+        .contents[0]
+        .replace('−', '-')
+    )
     return votes
+
 
 def upvote_comment(submission_id, comment_id):
     # submission_id: int, submission id
     # comment_id: int, comment id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     redir_url = r.url.rsplit('/', 1)[0]
 
-    r = s.get(f"{redir_url}/-/comment/{comment_id}")
+    r = s.get(f'{redir_url}/-/comment/{comment_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'data-vote-route-value': 'comment_vote'}).find('input', attrs={'name': 'token'})['value']
-    r = s.post(f"{BASE_URL}/cv/{comment_id}.json", files=dict(token=(None, csrf_token), choice=(None, 1)))
+    csrf_token = soup.find(
+        'form', attrs={'data-vote-route-value': 'comment_vote'}
+    ).find('input', attrs={'name': 'token'})['value']
+    r = s.post(
+        f'{BASE_URL}/cv/{comment_id}.json',
+        files=dict(token=(None, csrf_token), choice=(None, 1)),
+    )
     return r.json()
+
 
 def downvote_comment(submission_id, comment_id):
     # submission_id: int, submission id
     # comment_id: int, comment id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     redir_url = r.url.rsplit('/', 1)[0]
 
-    r = s.get(f"{redir_url}/-/comment/{comment_id}")
+    r = s.get(f'{redir_url}/-/comment/{comment_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'data-vote-route-value': 'comment_vote'}).find('input', attrs={'name': 'token'})['value']
-    r = s.post(f"{BASE_URL}/cv/{comment_id}.json", files=dict(token=(None, csrf_token), choice=(None, -1)))
+    csrf_token = soup.find(
+        'form', attrs={'data-vote-route-value': 'comment_vote'}
+    ).find('input', attrs={'name': 'token'})['value']
+    r = s.post(
+        f'{BASE_URL}/cv/{comment_id}.json',
+        files=dict(token=(None, csrf_token), choice=(None, -1)),
+    )
     return r.json()
+
 
 def unvote_comment(submission_id, comment_id):
     # submission_id: int, submission id
     # comment_id: int, comment id
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     redir_url = r.url.rsplit('/', 1)[0]
 
-    r = s.get(f"{redir_url}/-/comment/{comment_id}")
+    r = s.get(f'{redir_url}/-/comment/{comment_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'data-vote-route-value': 'comment_vote'}).find('input', attrs={'name': 'token'})['value']
-    r = s.post(f"{BASE_URL}/cv/{comment_id}.json", files=dict(token=(None, csrf_token), choice=(None, 0)))
+    csrf_token = soup.find(
+        'form', attrs={'data-vote-route-value': 'comment_vote'}
+    ).find('input', attrs={'name': 'token'})['value']
+    r = s.post(
+        f'{BASE_URL}/cv/{comment_id}.json',
+        files=dict(token=(None, csrf_token), choice=(None, 0)),
+    )
     return r.json()
+
 
 # API posting comment under a submission
 def post_comment(submission_id, comment):
     # submission_id: int, submission id
     # comment: str, comment content
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     redir_url = r.url.rsplit('/', 1)[0]
 
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'class': 'comment-form'}).find('input', attrs={'name': f'reply_to_submission_{submission_id}[_token]'})['value']
-    payload = {f'reply_to_submission_{submission_id}[_token]': (None, csrf_token), 
-               f'reply_to_submission_{submission_id}[comment]': (None, comment),
-               f'reply_to_submission_{submission_id}[userFlag]': (None, 'none'),
-               f'reply_to_submission_{submission_id}[email]': (None, '')}
-    r = s.post(f"{redir_url}/-/comment", files=payload)
+    csrf_token = soup.find('form', attrs={'class': 'comment-form'}).find(
+        'input', attrs={'name': f'reply_to_submission_{submission_id}[_token]'}
+    )['value']
+    payload = {
+        f'reply_to_submission_{submission_id}[_token]': (None, csrf_token),
+        f'reply_to_submission_{submission_id}[comment]': (None, comment),
+        f'reply_to_submission_{submission_id}[userFlag]': (None, 'none'),
+        f'reply_to_submission_{submission_id}[email]': (None, ''),
+    }
+    r = s.post(f'{redir_url}/-/comment', files=payload)
     return r.url
+
 
 # API replying comment under a comment
 def reply_comment(submission_id, comment_id, comment):
     # submission_id: int, submission id
     # comment_id: int, comment id to reply to
     # comment: str, comment content
-    r = s.get(f"{BASE_URL}/{submission_id}")
+    r = s.get(f'{BASE_URL}/{submission_id}')
     redir_url = r.url.rsplit('/', 1)[0]
 
-    r = s.get(f"{redir_url}/-/comment/{comment_id}")
+    r = s.get(f'{redir_url}/-/comment/{comment_id}')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'class': 'comment-form'}).find('input', attrs={'name': f'reply_to_comment_{comment_id}[_token]'})['value']
-    payload = {f'reply_to_comment_{comment_id}[_token]': (None, csrf_token), 
-               f'reply_to_comment_{comment_id}[comment]': (None, comment),
-               f'reply_to_comment_{comment_id}[userFlag]': (None, 'none'),
-               f'reply_to_comment_{comment_id}[email]': (None, '')}
-    r = s.post(f"{redir_url}/-/comment/{comment_id}", files=payload)
+    csrf_token = soup.find('form', attrs={'class': 'comment-form'}).find(
+        'input', attrs={'name': f'reply_to_comment_{comment_id}[_token]'}
+    )['value']
+    payload = {
+        f'reply_to_comment_{comment_id}[_token]': (None, csrf_token),
+        f'reply_to_comment_{comment_id}[comment]': (None, comment),
+        f'reply_to_comment_{comment_id}[userFlag]': (None, 'none'),
+        f'reply_to_comment_{comment_id}[email]': (None, ''),
+    }
+    r = s.post(f'{redir_url}/-/comment/{comment_id}', files=payload)
     return r.url
+
 
 def get_forum_by_id(forum_id):
     # forum_id: int, forum id
-    r = s.get(f"http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/api/forums/arlingtonva", headers={"X-Experimental-API":"1"})
+    r = s.get(f'{BASE_URL}/api/forums/arlingtonva', headers={'X-Experimental-API': '1'})
     return r.json()
+
 
 def create_forum(forum_name, title, sidebar, description):
     # forum_name: str, forum name
     # title: str, title
     # sidebar: str, sidebar
     # description: str, description
-    new_forum_url = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/api/forums'
+    new_forum_url = f'{BASE_URL}/api/forums'
     forum_data = {
         'name': forum_name,
         'title': title,
@@ -446,13 +524,14 @@ def create_forum(forum_name, title, sidebar, description):
     )
     return response.json()
 
+
 def update_forum(forum_id, forum_name, title, sidebar, description):
     # forum_id: int, forum id
     # forum_name: str, forum name
     # title: str, title
     # sidebar: str, sidebar
     # description: str, description
-    new_forum_url = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/api/forums'
+    new_forum_url = f'{BASE_URL}/api/forums'
     forum_data = {
         'name': forum_name,
         'title': title,
@@ -469,20 +548,27 @@ def update_forum(forum_id, forum_name, title, sidebar, description):
     )
     return response.json()
 
+
 def get_submission_by_id(submission_id):
     # submission_id: int, submission id
-    r = s.get(f"http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/api/submissions/{submission_id}", headers={"X-Experimental-API":"1"})
+    r = s.get(
+        f'{BASE_URL}/api/submissions/{submission_id}',
+        headers={'X-Experimental-API': '1'},
+    )
     return r.json()
 
-#API updating bio for current user profile
+
+# API updating bio for current user profile
 def update_bio(bio):
     # bio: str, bio content
-    r = s.get(f"{BASE_URL}/user/MarvelsGrantMan136/edit_biography")
+    r = s.get(f'{BASE_URL}/user/MarvelsGrantMan136/edit_biography')
     soup = BeautifulSoup(r.content, 'html.parser')
-    csrf_token = soup.find('form', attrs={'name': 'user_biography'}).find('input', attrs={'name': 'user_biography[_token]'})['value']
+    csrf_token = soup.find('form', attrs={'name': 'user_biography'}).find(
+        'input', attrs={'name': 'user_biography[_token]'}
+    )['value']
     payload = {'user_biography[_token]': csrf_token, 'user_biography[biography]': bio}
     print(payload)
-    r = s.post(f"{BASE_URL}/user/MarvelsGrantMan136/edit_biography", data=payload)
+    r = s.post(f'{BASE_URL}/user/MarvelsGrantMan136/edit_biography', data=payload)
     if r.status_code == 200:
-        return {"updated": True}
-    return {"updated": False}
+        return {'updated': True}
+    return {'updated': False}

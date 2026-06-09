@@ -10,9 +10,10 @@ import time
 
 from tqdm import tqdm
 
-sys.path.append('API-Based-Agent/evaluation/webarena/webarena')
-sys.path.append('API-Based-Agent/evaluation/webarena/webarena/evaluation_harness')
+sys.path.append('evaluation/webarena/webarena')
+sys.path.append('evaluation/webarena/webarena/evaluation_harness')
 from utils import check_correctness, get_initial_prompt_from_task, get_tests
+
 from opendevin.controller.state.state import State
 from opendevin.core.config import config, get_llm_config_arg, get_parser
 from opendevin.core.logger import get_console_handler
@@ -41,6 +42,7 @@ def codeact_user_response(state: State) -> str:
         + '\nAfter that, when you responded with your answer, you should respond with <finish></finish>.'
         + '\nThen finally, to exit, you can run <execute_bash>\nexit()\n</execute_bash>'
     )
+
 
 def monologue_user_response(state: State) -> str:
     raise NotImplementedError('MonologueAgent should never ask for user responses.')
@@ -108,9 +110,10 @@ def process_instance(task, agent_class, metadata, reset_logger: bool = True):
 
     output_log = ''
     for i, (act, obs) in enumerate(state.history):
-        output_log += f"Step {i}:\nact - {act}\nobs - {obs}\n\n"
+        output_log += f'Step {i}:\nact - {act}\nobs - {obs}\n\n'
     log_file = os.path.join(eval_output_dir, 'logs', f'instance_{task_id}.log')
-    with open(log_file, 'w') as f: f.write(output_log)
+    with open(log_file, 'w') as f:
+        f.write(output_log)
 
     model_answer_raw = ''
     model_answer_last = ''
@@ -120,17 +123,16 @@ def process_instance(task, agent_class, metadata, reset_logger: bool = True):
                 act.content.strip() != ''
                 and act.content.strip() != 'Too many errors encountered. Task failed.'
             ):
-                model_answer_raw += f"{act.content}\n"
-                model_answer_last = f"{act.content}\n"
+                model_answer_raw += f'{act.content}\n'
+                model_answer_last = f'{act.content}\n'
         elif act.source == 'agent':
             if (
                 act.thought.strip() != ''
-                and act.thought.strip()
-                != 'Too many errors encountered. Task failed.'
+                and act.thought.strip() != 'Too many errors encountered. Task failed.'
             ):
-                model_answer_last = f"{act.thought}\n"
-                model_answer_raw += f"{act.thought}\n"
-                model_answer_raw += f"{obs}\n"
+                model_answer_last = f'{act.thought}\n'
+                model_answer_raw += f'{act.thought}\n'
+                model_answer_raw += f'{obs}\n'
     # attempt to parse model_answer
     correct = check_correctness(task, model_answer_raw, log_file)
     metrics = state.metrics.get() if state.metrics else None
@@ -148,6 +150,7 @@ def process_instance(task, agent_class, metadata, reset_logger: bool = True):
         'metrics': metrics,
         'error': state.error if state and state.error else None,
         'correct': correct,
+        'end_time': time.strftime('%Y-%m-%d %H:%M:%S'),
     }
     return output
 
@@ -261,17 +264,11 @@ if __name__ == '__main__':
             eval_output_dir, f'output_shopping_{model_name}.jsonl'
         )
     elif tests[0]['sites'] == ['gitlab']:
-        output_file = os.path.join(
-            eval_output_dir, f'output_gitlab_{model_name}.jsonl'
-        )
+        output_file = os.path.join(eval_output_dir, f'output_gitlab_{model_name}.jsonl')
     elif tests[0]['sites'] == ['reddit']:
-        output_file = os.path.join(
-            eval_output_dir, f'output_reddit_{model_name}.jsonl'
-        )
+        output_file = os.path.join(eval_output_dir, f'output_reddit_{model_name}.jsonl')
     elif tests[0]['sites'] == ['map']:
-        output_file = os.path.join(
-            eval_output_dir, f'output_map_{model_name}.jsonl'
-        )
+        output_file = os.path.join(eval_output_dir, f'output_map_{model_name}.jsonl')
     else:
         assert 1 == 2
         output_file = os.path.join(eval_output_dir, f'output_{model_name}.jsonl')
@@ -324,6 +321,4 @@ if __name__ == '__main__':
             output_fp.write(json.dumps(output) + '\n')
             output_fp.flush()
             finished_task_ids.add(output['task_id'])
-        else:
-            logger.info(f"task failed for task_id {task['task_id']} - {e}")
     output_fp.close()

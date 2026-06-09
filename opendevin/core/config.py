@@ -65,12 +65,14 @@ class LLMConfig(metaclass=Singleton):
     timeout: int | None = None
     max_chars: int = 5_000_000  # fallback for token counting
     temperature: float = 0
-    top_p: float = 0.5
+    top_p: float | None = None
     custom_llm_provider: str | None = None
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None
     input_cost_per_token: float | None = None
     output_cost_per_token: float | None = None
+    caching_enabled: bool = False
+    cache_dir: str = '/tmp/llm_cache'
 
     def defaults_to_dict(self) -> dict:
         """

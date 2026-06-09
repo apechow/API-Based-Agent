@@ -4,10 +4,16 @@ from browsergym.core.action.highlevel import HighLevelActionSet
 from browsergym.utils.obs import flatten_axtree_to_str
 
 from agenthub.codeact_agent.action_parser import InterleavingResponseParser
-from agenthub.codeact_agent.prompt import SYSTEM_PREFIX, API_PROMPT, BROWSING_PREFIX, SYSTEM_SUFFIX, EXAMPLE_PROMPT
-from opendevin.core.logger import opendevin_logger as logger
+from agenthub.codeact_agent.prompt import (
+    API_PROMPT,
+    BROWSING_PREFIX,
+    EXAMPLE_PROMPT,
+    SYSTEM_PREFIX,
+    SYSTEM_SUFFIX,
+)
 from opendevin.controller.agent import Agent
 from opendevin.controller.state.state import State
+from opendevin.core.logger import opendevin_logger as logger
 from opendevin.events.action import (
     Action,
     AgentFinishAction,
@@ -16,7 +22,6 @@ from opendevin.events.action import (
     IPythonRunCellAction,
     MessageAction,
 )
-from opendevin.events.event import EventSource
 from opendevin.events.observation import (
     BrowserOutputObservation,
     CmdOutputObservation,
@@ -46,13 +51,16 @@ else:
 EVAL_MODE = True
 PROMPT_CACHE = True
 
-GITLAB_URL = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:8023'
-SHOPPING_URL = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7770'
-SHOPPING_ADMIN_URL = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7780/admin'
-MAP_URL = 'http://miniserver1875.asuscomm.com:3000'
-REDDIT_URL = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999'
+GITLAB_URL = os.environ.get('GITLAB', '')
+SHOPPING_URL = os.environ.get('SHOPPING', '')
+SHOPPING_ADMIN_URL = os.environ.get('SHOPPING_ADMIN', '')
+MAP_URL = os.environ.get('MAP', '')
+REDDIT_URL = os.environ.get('REDDIT', '')
+
+
 def get_error_prefix(last_browser_action: str) -> str:
     return f'IMPORTANT! Last action is incorrect:\n{last_browser_action}\nThink again with the current observation of the page.\n'
+
 
 CONCISE_INSTRUCTION = """\
 
@@ -63,7 +71,10 @@ In order to accomplish my goal I need to send the information asked back to the 
 "
 """
 
-def get_browse_prompt(error_prefix: str, cur_axtree_txt: str, prev_action_str: str) -> str:
+
+def get_browse_prompt(
+    error_prefix: str, cur_axtree_txt: str, prev_action_str: str
+) -> str:
     prompt = f"""\
 {error_prefix}
 
@@ -82,6 +93,7 @@ In order to accomplish my goal I need to click on the button with bid 12
     if USE_CONCISE_ANSWER:
         prompt += CONCISE_INSTRUCTION
     return prompt
+
 
 def action_to_str(action: Action) -> str:
     if isinstance(action, CmdRunAction):
@@ -149,7 +161,7 @@ def truncate_observation(observation: str, max_chars: int = 10_000) -> str:
 
 
 def get_in_context_example() -> str:
-    return EXAMPLES
+    return EXAMPLE_PROMPT
 
 
 class CodeActAgent(Agent):
@@ -244,8 +256,14 @@ class CodeActAgent(Agent):
         - MessageAction(content) - Message action to run (e.g. ask for clarification)
         - AgentFinishAction() - end the interaction
         """
-        history_str = f"{state.history}"
-        SYSTEM_PROMPT = SYSTEM_PREFIX + API_PROMPT + BROWSING_PREFIX + SYSTEM_SUFFIX + EXAMPLE_PROMPT
+        history_str = f'{state.history}'
+        SYSTEM_PROMPT = (
+            SYSTEM_PREFIX
+            + API_PROMPT
+            + BROWSING_PREFIX
+            + SYSTEM_SUFFIX
+            + EXAMPLE_PROMPT
+        )
 
         messages: list[dict[str, str]] = [
             {'role': 'system', 'content': SYSTEM_PROMPT},
@@ -261,31 +279,38 @@ class CodeActAgent(Agent):
                 last_action = prev_action
                 last_obs = obs
                 # Removing the first action is for webarena only
-                if i != 1 and i != 2 and i != 3: prev_actions.append(prev_action.browser_actions)
-                if last_obs.error and i > 3:
-                # add error recovery prompt prefix
-                    error_prefix = get_error_prefix(last_obs.last_browser_action)
-                    self.error_accumulator += 1
-                    if self.error_accumulator > 10:
-                        return MessageAction('Too many errors encountered. Task failed.')
-                try:
-                    cur_axtree_txt = flatten_axtree_to_str(
-                        last_obs.axtree_object,
-                        extra_properties=last_obs.extra_element_properties,
-                        with_clickable=True,
-                        filter_visible_only=True,
-                    )
-                except Exception as e:
-                    logger.error(
-                        'Error when trying to process the accessibility tree: %s', e
-                    )
-                    return MessageAction('Error encountered when browsing.')
+                if i != 1 and i != 2 and i != 3:
+                    prev_actions.append(prev_action.browser_actions)
+                if isinstance(last_obs, BrowserOutputObservation):
+                    if last_obs.error and i > 3:
+                        # add error recovery prompt prefix
+                        error_prefix = get_error_prefix(last_obs.last_browser_action)
+                        self.error_accumulator += 1
+                        if self.error_accumulator > 10:
+                            return MessageAction(
+                                'Too many errors encountered. Task failed.'
+                            )
+                    try:
+                        cur_axtree_txt = flatten_axtree_to_str(
+                            last_obs.axtree_object,
+                            extra_properties=last_obs.extra_element_properties,
+                            with_clickable=True,
+                            filter_visible_only=True,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            'Error when trying to process the accessibility tree: %s', e
+                        )
+                        return MessageAction('Error encountered when browsing.')
                 prev_action_str = '\n'.join(prev_actions)
-                browse_prompt = get_browse_prompt(error_prefix, cur_axtree_txt, prev_action_str)
+                browse_prompt = get_browse_prompt(
+                    error_prefix, cur_axtree_txt, prev_action_str
+                )
             if i == 3:
                 browse_prompt = get_browse_prompt('', cur_axtree_txt, '')
                 continue
-            if i == 1 or i == 2: continue
+            if i == 1 or i == 2:
+                continue
             if isinstance(prev_action, Action):
                 message = get_action_message(prev_action)
                 if message:
@@ -294,7 +319,7 @@ class CodeActAgent(Agent):
                 message = get_observation_message(obs)
                 if message:
                     messages.append(message)
-      
+
         # logger.info(f"browse_prompt: {browse_prompt}")
         if (
             isinstance(last_action, BrowseInteractiveAction)
@@ -306,49 +331,48 @@ class CodeActAgent(Agent):
             # for webarena and miniwob++ eval, we need to retrieve the initial observation already in browser env
             # initialize and retrieve the first observation by issuing an noop OP
             # For non-benchmark browsing, the browser env starts with a blank page, and the agent is expected to first navigate to desired websites
-            # This message will not be included in `messages` 
-            
+            # This message will not be included in `messages`
+
             ### SHOPPING
             if SHOPPING_URL in history_str:
-                logger.info(f"logging in to shopping website")
+                logger.info('logging in to shopping website')
                 action = f'goto("{SHOPPING_URL}/customer/account/login/")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### MAP
             if MAP_URL in history_str:
-                logger.info(f"logging in to map website")
+                logger.info('logging in to map website')
                 action = f'goto("{MAP_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
-            
-            ### SHOPPING ADMIN    
+
+            ### SHOPPING ADMIN
             if SHOPPING_ADMIN_URL in history_str:
-                logger.info(f"logging in to shopping admin website")
+                logger.info('logging in to shopping admin website')
                 action = f'goto("{SHOPPING_ADMIN_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### REDDIT
             if REDDIT_URL in history_str:
-                logger.info(f"logging in to reddit website")
-                action = f'goto("http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/login?_cookie_check=1727865249")\n'
+                logger.info('logging in to reddit website')
+                action = f'goto("{REDDIT_URL}/login")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB
             if GITLAB_URL in history_str:
-                logger.info(f"logging in to gitlab")
+                logger.info('logging in to gitlab')
                 action = f'goto("{GITLAB_URL}/users/sign_in")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB and REDDIT
             if GITLAB_URL in history_str and REDDIT_URL in history_str:
-                logger.info(f"logging in to reddit")
-                action = f'goto("http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999/login?_cookie_check=1727865249")\n'
+                logger.info('logging in to reddit')
+                action = f'goto("{REDDIT_URL}/login")\n'
                 action += 'fill("62", "MarvelsGrantMan136")\n'
                 action += 'fill("65", "test1234")\n'
                 action += 'click("76")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
         elif EVAL_MODE and len(state.history) <= 2:
-            
             ### SHOPPING
             if SHOPPING_URL in history_str:
                 action = 'fill("1375", "emma.lopez@gmail.com")\n'
@@ -361,8 +385,8 @@ class CodeActAgent(Agent):
                 MAP_START_URL = os.environ.get('MAP_START_URL', MAP_URL)
                 action = f'goto("{MAP_START_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
-                
-            ### SHOPPING ADMIN    
+
+            ### SHOPPING ADMIN
             if SHOPPING_ADMIN_URL in history_str:
                 action = 'fill("133", "admin")\n'
                 action += 'fill("138", "admin1234")\n'
@@ -385,17 +409,19 @@ class CodeActAgent(Agent):
 
             ### GITLAB and REDDIT
             if GITLAB_URL in history_str and REDDIT_URL in history_str:
-                logger.info(f"logging in to gitlab")
+                logger.info('logging in to gitlab')
                 action = f'goto("{GITLAB_URL}/users/sign_in")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
-        
+
         elif EVAL_MODE and len(state.history) <= 3:
-            
             ### SHOPPING
             if SHOPPING_URL in history_str:
                 SHOPPING_START_URL = os.environ.get('SHOPPING_START_URL', SHOPPING_URL)
-                logger.info(f"opening shopping {SHOPPING_START_URL}")
-                task_start_urls = [task_start_url.strip() for task_start_url in SHOPPING_START_URL.split('|AND|')]
+                logger.info(f'opening shopping {SHOPPING_START_URL}')
+                task_start_urls = [
+                    task_start_url.strip()
+                    for task_start_url in SHOPPING_START_URL.split('|AND|')
+                ]
                 action = ''
                 for url in task_start_urls:
                     action += f'goto("{url}")\n'
@@ -403,8 +429,10 @@ class CodeActAgent(Agent):
 
             ### SHOPPING ADMIN
             if SHOPPING_ADMIN_URL in history_str:
-                SHOPPING_ADMIN_START_URL = os.environ.get('SHOPPING_ADMIN_START_URL', SHOPPING_ADMIN_URL)
-                logger.info(f"opening shopping admin {SHOPPING_ADMIN_START_URL}")
+                SHOPPING_ADMIN_START_URL = os.environ.get(
+                    'SHOPPING_ADMIN_START_URL', SHOPPING_ADMIN_URL
+                )
+                logger.info(f'opening shopping admin {SHOPPING_ADMIN_START_URL}')
                 action = f'goto("{SHOPPING_ADMIN_START_URL}")'
                 response = f'<execute_browse> {action} </execute_browse>'
 
@@ -422,8 +450,11 @@ class CodeActAgent(Agent):
 
             if SHOPPING_URL in history_str and REDDIT_URL in history_str:
                 SHOPPING_START_URL = os.environ.get('SHOPPING_START_URL', SHOPPING_URL)
-                logger.info(f"opening shopping {SHOPPING_START_URL}")
-                task_start_urls = [task_start_url.strip() for task_start_url in SHOPPING_START_URL.split('|AND|')]
+                logger.info(f'opening shopping {SHOPPING_START_URL}')
+                task_start_urls = [
+                    task_start_url.strip()
+                    for task_start_url in SHOPPING_START_URL.split('|AND|')
+                ]
                 action = ''
                 for url in task_start_urls:
                     action += f'goto("{url}")\n'
@@ -432,18 +463,17 @@ class CodeActAgent(Agent):
             ### GITLAB
             if GITLAB_URL in history_str:
                 GITLAB_START_URL = os.environ.get('GITLAB_START_URL', GITLAB_URL)
-                logger.info(f"opening gitlab {GITLAB_START_URL}")
+                logger.info(f'opening gitlab {GITLAB_START_URL}')
                 action = f'goto("{GITLAB_START_URL}")'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB and REDDIT
             if GITLAB_URL in history_str and REDDIT_URL in history_str:
-                logger.info(f"logging in to gitlab")
+                logger.info('logging in to gitlab')
                 action = 'fill("66", "byteblaze")\n'
                 action += 'fill("70", "hello1234")\n'
                 action += 'click("83")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
-
 
         else:
             messages[-1]['content'] = messages[-1]['content'] + '\n' + browse_prompt
@@ -457,9 +487,14 @@ class CodeActAgent(Agent):
                         f'\n\nENVIRONMENT REMINDER: You have {state.max_iterations - state.iteration} turns left to complete the task.'
                     )
             for message in messages:
-                message['content'] = message['content'].replace('**JavaScript seems to be disabled in your browser.** For the best experience on our site, be sure to turn on Javascript in your browser.', '')
-                message['content'] = message['content'].replace('The store will not work correctly when cookies are disabled.', '')
-            response = self.llm.completion(
+                message['content'] = message['content'].replace(
+                    '**JavaScript seems to be disabled in your browser.** For the best experience on our site, be sure to turn on Javascript in your browser.',
+                    '',
+                )
+                message['content'] = message['content'].replace(
+                    'The store will not work correctly when cookies are disabled.', ''
+                )
+            llm_response = self.llm.completion(
                 messages=messages,
                 stop=[
                     '</execute_ipython>',
@@ -470,8 +505,9 @@ class CodeActAgent(Agent):
             )
             state.num_of_chars += sum(
                 len(message['content']) for message in messages
-            ) + len(response.choices[0].message.content)        
-        
+            ) + len(llm_response.choices[0].message.content)
+            response = llm_response
+
         # for i,message in enumerate(messages):
         #     logger.info(f"{i}: {message}")
         # logger.info(f"response: {response}")

@@ -2,87 +2,68 @@ import collections
 import html
 import json
 import os
-import random
 import re
-import string
-import subprocess
 import tempfile
 import time
 import urllib
-import csv
-import openai
+
 import requests
-from bs4 import BeautifulSoup
-from opendevin.core.logger import opendevin_logger as logger
 from prompt import get_initial_prompt, get_initial_prompt_multi
 
-"""base class for evaluation"""
-os.environ['REDDIT'] = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999'
-os.environ['SHOPPING'] = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7770'
-os.environ['SHOPPING_ADMIN'] = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7780/admin'
-os.environ['GITLAB'] = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:8023'
-os.environ['WIKIPEDIA'] = 'WIKIPEDIA'
-os.environ['MAP'] = 'http://miniserver1875.asuscomm.com:3000'
-os.environ['HOMEPAGE'] = 'HOMEPAGE'
-os.environ['OPENAI_API_KEY'] = ''
+from opendevin.core.logger import opendevin_logger as logger
 
-from playwright.sync_api import sync_playwright
-from webarena.evaluation_harness.helper_functions import (
+"""base class for evaluation"""
+os.environ.setdefault('REDDIT', '')
+os.environ.setdefault('SHOPPING', '')
+os.environ.setdefault('SHOPPING_ADMIN', '')
+os.environ.setdefault('GITLAB', '')
+os.environ.setdefault('WIKIPEDIA', '')
+os.environ.setdefault('MAP', '')
+os.environ.setdefault('HOMEPAGE', '')
+
+from playwright.sync_api import sync_playwright  # noqa: E402
+from webarena.evaluation_harness.helper_functions import (  # noqa: E402
     llm_fuzzy_match,
     llm_ua_match,
-    shopping_get_latest_order_url,
-    shopping_get_sku_latest_review_author,
-    shopping_get_sku_latest_review_rating,
-    gitlab_get_project_memeber_role,
-    reddit_get_post_url,
 )
 
-gitlab_token = 'glpat-KygcYjwtD2JfA6wU4wBd'
+gitlab_token = os.environ.get('GITLAB_TOKEN', '')
+
 
 def get_shopping_customer_auth_token():
-    ENDPOINT = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7770'
+    ENDPOINT = os.environ.get('SHOPPING', '')
     response = requests.post(
-        url = f'{ENDPOINT}/rest/default/V1/integration/customer/token',
-        headers = {
-            'content-type': 'application/json'
-        },
-        data = json.dumps({
-            'username': 'emma.lopez@gmail.com',
-            'password': 'Password.123'
-        })
+        url=f'{ENDPOINT}/rest/default/V1/integration/customer/token',
+        headers={'content-type': 'application/json'},
+        data=json.dumps(
+            {'username': 'emma.lopez@gmail.com', 'password': 'Password.123'}
+        ),
     )
     return response.json()
+
 
 def get_shopping_admin_auth_token():
-    ENDPOINT = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7770'
+    ENDPOINT = os.environ.get('SHOPPING', '')
     response = requests.post(
-        url = f'{ENDPOINT}/rest/default/V1/integration/admin/token',
-        headers = {
-            'content-type': 'application/json'
-        },
-        data = json.dumps({
-            'username': 'admin',
-            'password': 'admin1234'
-        })
+        url=f'{ENDPOINT}/rest/default/V1/integration/admin/token',
+        headers={'content-type': 'application/json'},
+        data=json.dumps({'username': 'admin', 'password': 'admin1234'}),
     )
     return response.json()
+
 
 def get_shopping_admin_admin_auth_token():
-    ENDPOINT = 'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:7780'
+    ENDPOINT = os.environ.get('SHOPPING_ADMIN_REST', '')
     response = requests.post(
-        url = f'{ENDPOINT}/rest/default/V1/integration/admin/token',
-        headers = {
-            'content-type': 'application/json'
-        },
-        data = json.dumps({
-            'username': 'admin',
-            'password': 'admin1234'
-        })
+        url=f'{ENDPOINT}/rest/default/V1/integration/admin/token',
+        headers={'content-type': 'application/json'},
+        data=json.dumps({'username': 'admin', 'password': 'admin1234'}),
     )
     return response.json()
 
+
 def parse_test_file():
-    json_file_path = 'API-Based-Agent/evaluation/webarena/test.raw.json'
+    json_file_path = 'evaluation/webarena/test.raw.json'
     with open(json_file_path, 'r') as file:
         file = file.read()
         file = file.replace('__GITLAB__', os.getenv('GITLAB'))
@@ -93,185 +74,268 @@ def parse_test_file():
         data = json.loads(file)
     return data
 
+
 def get_all_gitlab_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if dat['sites'] == ['gitlab']: output.append(dat)
+        if dat['sites'] == ['gitlab']:
+            output.append(dat)
     return output
+
+
 gitlab_tests = get_all_gitlab_test()
+
 
 def get_shopping_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if dat['sites'] == ['shopping']: output.append(dat)
+        if dat['sites'] == ['shopping']:
+            output.append(dat)
     return output
+
+
 shopping_tests = get_shopping_test()
+
 
 def get_shopping_admin_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        include = True
-        if dat['sites'] == ['shopping_admin']: output.append(dat)
+        if dat['sites'] == ['shopping_admin']:
+            output.append(dat)
     return output
+
+
 shopping_admin_tests = get_shopping_admin_test()
+
 
 def get_map_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if dat['sites'] == ['map']: output.append(dat)
+        if dat['sites'] == ['map']:
+            output.append(dat)
     return output
+
+
 map_tests = get_map_test()
+
 
 def get_reddit_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if dat['sites'] == ['reddit']: output.append(dat)
+        if dat['sites'] == ['reddit']:
+            output.append(dat)
     return output
+
+
 reddit_tests = get_reddit_test()
+
 
 def get_gitlab_reddit_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        include = True
-        if (dat['sites'] == ['reddit', 'gitlab'] or dat['sites'] == ['gitlab', 'reddit']):
+        if dat['sites'] == ['reddit', 'gitlab'] or dat['sites'] == ['gitlab', 'reddit']:
             output.append(dat)
     return output
+
+
 gitlab_reddit_tests = get_gitlab_reddit_test()
+
 
 def get_shopping_reddit_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if (dat['sites'] == ['reddit', 'shopping'] or dat['sites'] == ['shopping', 'reddit']):
+        if dat['sites'] == ['reddit', 'shopping'] or dat['sites'] == [
+            'shopping',
+            'reddit',
+        ]:
             output.append(dat)
     return output
+
+
 shopping_reddit_tests = get_shopping_reddit_test()
+
 
 def get_shopping_admin_map_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if (dat['sites'] == ['map', 'shopping_admin'] or dat['sites'] == ['shopping_admin', 'map']): 
+        if dat['sites'] == ['map', 'shopping_admin'] or dat['sites'] == [
+            'shopping_admin',
+            'map',
+        ]:
             output.append(dat)
     return output
+
+
 shopping_admin_map_tests = get_shopping_admin_map_test()
+
 
 def get_wikipedia_map_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if (dat['sites'] == ['map', 'wikipedia'] or dat['sites'] == ['wikipedia', 'map']):
+        if dat['sites'] == ['map', 'wikipedia'] or dat['sites'] == ['wikipedia', 'map']:
             output.append(dat)
     return output
+
+
 wikipedia_map_tests = get_wikipedia_map_test()
+
 
 def get_wikipedia_gitlab_test():
     data = parse_test_file()
     output = []
     for dat in data:
-        if (dat['sites'] == ['gitlab', 'wikipedia'] or dat['sites'] == ['wikipedia', 'gitlab']):
+        if dat['sites'] == ['gitlab', 'wikipedia'] or dat['sites'] == [
+            'wikipedia',
+            'gitlab',
+        ]:
             output.append(dat)
     return output
+
+
 wikipedia_gitlab_tests = get_wikipedia_gitlab_test()
+
 
 def get_task_by_task_id(task_id):
     for test in parse_test_file():
-        if test['task_id'] == task_id: return test
+        if test['task_id'] == task_id:
+            return test
     return None
+
 
 def get_tests(start_task_id):
     task = get_task_by_task_id(start_task_id)
     sites = task['sites']
-    if sites == ['gitlab']: tests = gitlab_tests
-    if sites == ['shopping']: tests = shopping_tests
-    if sites == ['shopping_admin']: tests = shopping_admin_tests
-    if sites == ['map']: tests = map_tests
-    if sites == ['reddit']: tests = reddit_tests
-    if sites == ['reddit', 'gitlab'] or sites == ['gitlab', 'reddit']: tests = gitlab_reddit_tests
-    if sites == ['reddit', 'shopping'] or sites == ['shopping', 'reddit']: tests = shopping_reddit_tests
-    if sites == ['map', 'shopping_admin'] or sites == ['shopping_admin', 'map']: tests = shopping_admin_map_tests
-    if sites == ['map', 'wikipedia'] or sites == ['wikipedia', 'map']: tests = wikipedia_map_tests
-    if sites == ['gitlab', 'wikipedia'] or sites == ['wikipedia', 'gitlab']: tests = wikipedia_gitlab_tests
+    if sites == ['gitlab']:
+        tests = gitlab_tests
+    if sites == ['shopping']:
+        tests = shopping_tests
+    if sites == ['shopping_admin']:
+        tests = shopping_admin_tests
+    if sites == ['map']:
+        tests = map_tests
+    if sites == ['reddit']:
+        tests = reddit_tests
+    if sites == ['reddit', 'gitlab'] or sites == ['gitlab', 'reddit']:
+        tests = gitlab_reddit_tests
+    if sites == ['reddit', 'shopping'] or sites == ['shopping', 'reddit']:
+        tests = shopping_reddit_tests
+    if sites == ['map', 'shopping_admin'] or sites == ['shopping_admin', 'map']:
+        tests = shopping_admin_map_tests
+    if sites == ['map', 'wikipedia'] or sites == ['wikipedia', 'map']:
+        tests = wikipedia_map_tests
+    if sites == ['gitlab', 'wikipedia'] or sites == ['wikipedia', 'gitlab']:
+        tests = wikipedia_gitlab_tests
     for idx in range(len(tests)):
         test = tests[idx]
         if test['task_id'] == start_task_id:
             return tests[idx:]
     return []
 
+
 def get_gitlab_apis():
-    api_file_path = 'API-Based-Agent/evaluation/webarena/api/gitlab_api.txt'
+    api_file_path = 'evaluation/webarena/api/gitlab_api.txt'
     with open(api_file_path, 'r') as file:
         api_file = file.read()
     return api_file
 
-def get_shopping_apis(shopping_html_pages = []):
-    api_file_path = 'API-Based-Agent/evaluation/webarena/api/shopping-admin-summary.json'
+
+def get_shopping_apis(shopping_html_pages=None):
+    api_file_path = 'evaluation/webarena/api/shopping-admin-summary.json'
     with open(api_file_path, 'r') as file:
         api_file = json.load(file)
-    shopping_html_pages = [shopping_html_page for shopping_html_page in shopping_html_pages if shopping_html_page != os.getenv('SHOPPING')]
-    if shopping_html_pages == []: return api_file
+    shopping_html_pages = shopping_html_pages or []
+    shopping_html_pages = [
+        shopping_html_page
+        for shopping_html_page in shopping_html_pages
+        if shopping_html_page != os.getenv('SHOPPING')
+    ]
+    if shopping_html_pages == []:
+        return api_file
     new_api_file = {}
     for shopping_html_page in shopping_html_pages:
-        new_api_file[shopping_html_page] = f'Retrieve the content in the HTML page {shopping_html_page}'
+        new_api_file[shopping_html_page] = (
+            f'Retrieve the content in the HTML page {shopping_html_page}'
+        )
     new_api_file.update(api_file)
     return new_api_file
 
+
 def get_map_apis():
     api_doc = ''
-    dir = 'API-Based-Agent/evaluation/webarena/api/map/'
-    with open(dir+'http.md', 'r') as file:
+    dir = 'evaluation/webarena/api/map/'
+    with open(dir + 'http.md', 'r') as file:
         api_doc += 'Below is all the documentation on how to use the http://metis.lti.cs.cmu.edu:{profile}/{service}/v1/test/ endpoints.\n'
         api_doc += file.read()
     api_doc += '\nBelow is all the documentation on how to use the http://metis.lti.cs.cmu.edu:8085/ endpoints.\n'
     files_osm = ['Search.md', 'Lookup.md', 'Reverse.md', 'Output.md', 'Faq.md']
     for f in files_osm:
-        file_path = dir+f
+        file_path = dir + f
         with open(file_path, 'r') as file:
             api_doc += file.read()
     api_doc += '\nBelow is a list of editing API you could use for fetching and saving raw geodata from/to the OpenStreetMap database APIs. '
-    api_doc += 'For the following APIs, you should use the endpoint http://miniserver1875.asuscomm.com:3000/. '
-    api_doc += 'To find out more about the `http://miniserver1875.asuscomm.com:3000/` APIs you could do `from utils import get_api_documentation_map` and then use get_api_documentation_map(API) to learn more about the API.\n'
-    with open(dir+'map_api.json', 'r') as file:
+    _map = os.environ.get('MAP', '')
+    api_doc += f'For the following APIs, you should use the endpoint {_map}/. '
+    api_doc += f'To find out more about the `{_map}/` APIs you could do `from utils import get_api_documentation_map` and then use get_api_documentation_map(API) to learn more about the API.\n'
+    with open(dir + 'map_api.json', 'r') as file:
         api_doc += file.read()
     return api_doc
 
+
 def get_reddit_apis():
-    with open('API-Based-Agent/evaluation/webarena/api/reddit.md', 'r') as f:
+    with open('evaluation/webarena/api/reddit.md', 'r') as f:
         f = f.read()
+    f = f.replace(
+        'http://ec2-18-219-239-190.us-east-2.compute.amazonaws.com:9999',
+        os.getenv('REDDIT', ''),
+    )
     return f
+
 
 def get_initial_prompt_from_task(task):
     sites = task['sites']
-    if sites == ['gitlab'] or ('gitlab' in sites and 'wikipedia' in sites): 
+    if sites == ['gitlab'] or ('gitlab' in sites and 'wikipedia' in sites):
         site_name = 'gitlab'
         site_base = os.getenv('GITLAB')
         os.environ['GITLAB_START_URL'] = task['start_url']
         logger.info(f"os.environ['GITLAB_START_URL']: {os.environ['GITLAB_START_URL']}")
-        return get_initial_prompt(site_name, site_base, task, get_gitlab_apis(), gitlab_token)
-    if sites == ['shopping']: 
+        return get_initial_prompt(
+            site_name, site_base, task, get_gitlab_apis(), gitlab_token
+        )
+    if sites == ['shopping']:
         site_name = 'shopping'
         site_base = os.getenv('SHOPPING')
         shopping_api_file = get_shopping_apis()
         os.environ['SHOPPING_START_URL'] = task['start_url']
-        logger.info(f"os.environ['SHOPPING_START_URL']: {os.environ['SHOPPING_START_URL']}")
+        logger.info(
+            f"os.environ['SHOPPING_START_URL']: {os.environ['SHOPPING_START_URL']}"
+        )
         admin_token = get_shopping_admin_auth_token()
         customer_token = get_shopping_customer_auth_token()
         extra_user_info = f'You should always use my access token {admin_token} in general. However, only when using the endpoints that contains `/V1/carts/mine` in the API, you must use this access token: {customer_token}, which you must not use for any other endpoints. For example, for the API endpoint `V1/products` you should use {admin_token}; while for the `/V1/carts/mine/items` endpoint, you should use {customer_token}.\n'
-        return get_initial_prompt(site_name, site_base, task, shopping_api_file, '', extra_user_info)
+        return get_initial_prompt(
+            site_name, site_base, task, shopping_api_file, '', extra_user_info
+        )
     if sites == ['shopping_admin']:
         site_name = 'shopping_admin'
         site_base = os.getenv('SHOPPING_ADMIN')
         shopping_api_file = get_shopping_apis()
         os.environ['SHOPPING_ADMIN_START_URL'] = task['start_url']
-        logger.info(f"os.environ['SHOPPING_ADMIN_START_URL']: {os.environ['SHOPPING_ADMIN_START_URL']}")
+        logger.info(
+            f"os.environ['SHOPPING_ADMIN_START_URL']: {os.environ['SHOPPING_ADMIN_START_URL']}"
+        )
         admin_token = get_shopping_admin_admin_auth_token()
-        return get_initial_prompt(site_name, site_base, task, shopping_api_file, admin_token, '')
+        return get_initial_prompt(
+            site_name, site_base, task, shopping_api_file, admin_token, ''
+        )
     if sites == ['map'] or ('map' in sites and 'wikipedia' in sites):
         site_name = 'map'
         site_base = os.getenv('MAP')
@@ -287,21 +351,52 @@ def get_initial_prompt_from_task(task):
         logger.info(f"os.environ['REDDIT_START_URL']: {os.environ['REDDIT_START_URL']}")
         return get_initial_prompt(site_name, site_base, task, reddit_api_file, '', '')
     if sites == ['map', 'shopping_admin']:
-        shopping_admin_site = {'site_base': os.getenv('SHOPPING_ADMIN'), 'api_info': get_shopping_apis(), 'api_token': get_shopping_admin_admin_auth_token(), 'extra_user_info': ''}
-        map_site = {'site_base': os.getenv('MAP'), 'api_info': get_map_apis(), 'api_token': '', 'extra_user_info': ''}
+        shopping_admin_site = {
+            'site_base': os.getenv('SHOPPING_ADMIN'),
+            'api_info': get_shopping_apis(),
+            'api_token': get_shopping_admin_admin_auth_token(),
+            'extra_user_info': '',
+        }
+        map_site = {
+            'site_base': os.getenv('MAP'),
+            'api_info': get_map_apis(),
+            'api_token': '',
+            'extra_user_info': '',
+        }
         sites = {'shopping_admin': shopping_admin_site, 'map': map_site}
         return get_initial_prompt_multi(sites, task)
     if sites == ['shopping', 'reddit']:
-        shopping_site = {'site_base': os.getenv('SHOPPING'), 'api_info': get_shopping_apis(), 'api_token': get_shopping_admin_auth_token(), 'extra_user_info': ''}
-        reddit_site = {'site_base': os.getenv('REDDIT'), 'api_info': get_reddit_apis(), 'api_token': '', 'extra_user_info': ''}
+        shopping_site = {
+            'site_base': os.getenv('SHOPPING'),
+            'api_info': get_shopping_apis(),
+            'api_token': get_shopping_admin_auth_token(),
+            'extra_user_info': '',
+        }
+        reddit_site = {
+            'site_base': os.getenv('REDDIT'),
+            'api_info': get_reddit_apis(),
+            'api_token': '',
+            'extra_user_info': '',
+        }
         sites = {'shopping': shopping_site, 'reddit': reddit_site}
         return get_initial_prompt_multi(sites, task)
     if sites == ['gitlab', 'reddit'] or sites == ['reddit', 'gitlab']:
-        gitlab_site = {'site_base': os.getenv('GITLAB'), 'api_info': get_gitlab_apis(), 'api_token': gitlab_token, 'extra_user_info': ''}
-        reddit_site = {'site_base': os.getenv('REDDIT'), 'api_info': get_reddit_apis(), 'api_token': '', 'extra_user_info': ''}
+        gitlab_site = {
+            'site_base': os.getenv('GITLAB'),
+            'api_info': get_gitlab_apis(),
+            'api_token': gitlab_token,
+            'extra_user_info': '',
+        }
+        reddit_site = {
+            'site_base': os.getenv('REDDIT'),
+            'api_info': get_reddit_apis(),
+            'api_token': '',
+            'extra_user_info': '',
+        }
         sites = {'gitlab': gitlab_site, 'reddit': reddit_site}
         return get_initial_prompt_multi(sites, task)
     return ''
+
 
 def clean_answer(answer: str) -> str:
     answer = answer.strip()
@@ -311,22 +406,28 @@ def clean_answer(answer: str) -> str:
         answer = answer[1:-1]
     return answer.lower()
 
+
 def exact_match(ref: str, pred: str) -> float:
     pattern = r'Finish\[(.*?)\]'
     matches = re.findall(pattern, pred)
-    if matches != []: pred = matches[-1]
+    if matches != []:
+        pred = matches[-1]
     return float(clean_answer(pred) == clean_answer(ref))
+
 
 def must_include(ref: str, pred: str, tokenize: bool = False) -> float:
     clean_ref = clean_answer(ref)
     clean_pred = clean_answer(pred)
     return float(clean_ref in clean_pred)
 
+
 def fuzzy_match(ref: str, pred: str, intent: str) -> float:
     return llm_fuzzy_match(pred, ref, intent)
 
+
 def ua_match(ref: str, pred: str, intent: str) -> float:
     return llm_ua_match(pred, ref, intent)
+
 
 def string_match(configs, pred) -> float:
     score = 1.0
@@ -360,25 +461,30 @@ def string_match(configs, pred) -> float:
                 else:
                     assert isinstance(value, list)
                     for reference in value:
-                        score *= fuzzy_match(
-                            ref=reference, pred=pred, intent=intent
-                        )
+                        score *= fuzzy_match(ref=reference, pred=pred, intent=intent)
     return score
+
 
 def get_url(history: str, response: str) -> str:
     while True:
         start_idx = history.rfind('Open pages: [')
-        if start_idx == -1: break
+        if start_idx == -1:
+            break
         counter = 1
         start_idx += len('Open pages: [')
         for i in range(start_idx, len(history), 1):
             if counter != 0:
-                if history[i] == '[': counter += 1
-                if history[i] == ']': counter -= 1
-            if counter == 0 and start_idx != i: return history[start_idx:i]
-            elif counter == 0: break
-        history = history[:(start_idx-len('Open pages: ['))]
+                if history[i] == '[':
+                    counter += 1
+                if history[i] == ']':
+                    counter -= 1
+            if counter == 0 and start_idx != i:
+                return history[start_idx:i]
+            elif counter == 0:
+                break
+        history = history[: (start_idx - len('Open pages: ['))]
     return ''
+
 
 def clean_url(url: str) -> str:
     url = str(url)
@@ -388,6 +494,7 @@ def clean_url(url: str) -> str:
     url = url.rstrip('/')
     return url
 
+
 def parse_url(url: str) -> tuple[str, dict[str, list[str]]]:
     """Parse a URL into its base, path, and query components."""
     url = urllib.parse.unquote(url)
@@ -395,6 +502,7 @@ def parse_url(url: str) -> tuple[str, dict[str, list[str]]]:
     base_path = parsed_url.netloc + parsed_url.path
     query = urllib.parse.parse_qs(parsed_url.query)
     return base_path, query
+
 
 def parse_urls(urls: list[str]) -> tuple[list[str], dict[str, set[str]]]:
     """Parse a list of URLs."""
@@ -406,6 +514,7 @@ def parse_urls(urls: list[str]) -> tuple[list[str], dict[str, set[str]]]:
         for k, v in query.items():
             queries[k].update(v)
     return base_paths, queries
+
 
 def url_match(configs, response, history) -> float:
     pred = get_url(history, response)
@@ -434,7 +543,9 @@ def url_match(configs, response, history) -> float:
             )
         score = base_score * query_score
         return score
-    else: raise ValueError(f'Unknown matching rule: {matching_rule}')
+    else:
+        raise ValueError(f'Unknown matching rule: {matching_rule}')
+
 
 def program_html(configs, config_file, pred, page, history) -> float:
     targets = configs['eval']['program_html']
@@ -445,7 +556,8 @@ def program_html(configs, config_file, pred, page, history) -> float:
             func = target_url.split('func:')[1]
             last_url = get_url(history, pred)
             last_url = clean_url(last_url)
-            if last_url == '': return 0.0
+            if last_url == '':
+                return 0.0
             page.goto(last_url)
             time.sleep(3)
             func = func.replace('__last_url__', page.url)
@@ -457,7 +569,8 @@ def program_html(configs, config_file, pred, page, history) -> float:
         else:
             last_url = get_url(history, pred)
             last_url = clean_url(last_url)
-            if last_url == '': return 0.0
+            if last_url == '':
+                return 0.0
             page.goto(last_url)
             time.sleep(3)
         try:
@@ -472,7 +585,8 @@ def program_html(configs, config_file, pred, page, history) -> float:
                         pass
                 try:
                     selected_element = str(page.evaluate(f'() => {locator}'))
-                    if not selected_element: selected_element = ''
+                    if not selected_element:
+                        selected_element = ''
                 except Exception:
                     # the page is wrong, return empty
                     selected_element = ''
@@ -480,16 +594,15 @@ def program_html(configs, config_file, pred, page, history) -> float:
                 func = locator.split('func:')[1]
                 func = func.replace('__page__', 'page')
                 selected_element = eval(func)
-            else: raise ValueError(f'Unknown locator: {locator}')
+            else:
+                raise ValueError(f'Unknown locator: {locator}')
         except Exception as e:
             logger.info(f'exception in program_html: {e}')
             selected_element = ''
         selected_element = html.unescape(selected_element)
         if 'exact_match' in target['required_contents']:
             required_contents = target['required_contents']['exact_match']
-            cur_score = exact_match(
-                ref=required_contents, pred=selected_element
-            )
+            cur_score = exact_match(ref=required_contents, pred=selected_element)
             score *= float(cur_score)
         elif 'must_include' in target['required_contents']:
             required_contents = target['required_contents']['must_include']
@@ -513,6 +626,7 @@ def program_html(configs, config_file, pred, page, history) -> float:
             )
     return score
 
+
 def html_match(configs, pred, page, history) -> float:
     temp_dir = tempfile.mkdtemp()
     config_file = f"{temp_dir}/{configs['task_id']}.json"
@@ -520,6 +634,7 @@ def html_match(configs, pred, page, history) -> float:
         json.dump(configs, f)
     score = program_html(configs, config_file, pred, page, history)
     return score
+
 
 def check_correctness(task, response, log_file):
     # use the answer if the task requires string_match + exact_match;
@@ -529,17 +644,21 @@ def check_correctness(task, response, log_file):
     # string match
     if 'string_match' in task['eval']['eval_types']:
         string_match_score = string_match(task, response)
-        if (string_match_score != 1.0):
+        if string_match_score != 1.0:
             response = response.replace('"', '')
             response = response.replace("'", '')
             response = response.replace(' ', '')
             string_match_score = string_match(task, response)
         score *= string_match_score
     # url match
-    with open(log_file, 'r') as f: history = f.read()
-    if 'url_match' in task['eval']['eval_types']: score *= url_match(task, response, history)
-    if score != 1.0: return False
-    if 'program_html' not in task['eval']['eval_types']: return score == 1.0
+    with open(log_file, 'r') as f:
+        history = f.read()
+    if 'url_match' in task['eval']['eval_types']:
+        score *= url_match(task, response, history)
+    if score != 1.0:
+        return False
+    if 'program_html' not in task['eval']['eval_types']:
+        return score == 1.0
     # setup context manager
     context_manager = sync_playwright()
     playwright = context_manager.__enter__()
@@ -557,7 +676,7 @@ def check_correctness(task, response, log_file):
         page.get_by_test_id('username-field').press('Tab')
         page.get_by_test_id('password-field').fill(password)
         page.get_by_test_id('sign-in-button').click()
-        context.storage_state(path='API-Based-Agent/evaluation/.auth/gitlab_state.json')
+        context.storage_state(path='evaluation/.auth/gitlab_state.json')
     if 'shopping' in sites:
         username = 'emma.lopez@gmail.com'
         password = 'Password.123'
@@ -566,7 +685,7 @@ def check_correctness(task, response, log_file):
         page.get_by_label('Email', exact=True).fill(username)
         page.get_by_label('Password', exact=True).fill(password)
         page.get_by_role('button', name='Sign In').click()
-        context.storage_state(path='/Users/artemis/Desktop/OpenDevin/evaluation/.auth/shopping_state.json')
+        context.storage_state(path='evaluation/.auth/shopping_state.json')
     if 'shopping_admin' in sites:
         username = 'admin'
         password = 'admin1234'
@@ -575,7 +694,7 @@ def check_correctness(task, response, log_file):
         page.get_by_label('Username', exact=True).fill(username)
         page.get_by_label('Password', exact=True).fill(password)
         page.get_by_role('button', name='Sign in').click()
-        context.storage_state(path='/Users/artemis/Desktop/OpenDevin/evaluation/.auth/shopping_admin_state.json')
+        context.storage_state(path='evaluation/.auth/shopping_admin_state.json')
     if 'reddit' in sites:
         username = 'MarvelsGrantMan136'
         password = 'test1234'
@@ -584,7 +703,8 @@ def check_correctness(task, response, log_file):
         page.get_by_label('Username').fill(username)
         page.get_by_label('Password').fill(password)
         page.get_by_role('button', name='Log in').click()
-        context.storage_state(path='/Users/artemis/Desktop/OpenDevin/evaluation/.auth/reddit_state.json')
-    if 'program_html' in task['eval']['eval_types']: score *= html_match(task, response, page, history)
+        context.storage_state(path='evaluation/.auth/reddit_state.json')
+    if 'program_html' in task['eval']['eval_types']:
+        score *= html_match(task, response, page, history)
     context_manager.__exit__()
     return score == 1.0

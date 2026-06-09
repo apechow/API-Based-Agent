@@ -66,12 +66,14 @@ echo "export JUPYTER_EXEC_SERVER_PID=$JUPYTER_EXEC_SERVER_PID" >> ~/.bashrc
 echo "Execution server started with PID: $JUPYTER_EXEC_SERVER_PID"
 
 # Wait until /opendevin/logs/jupyter_kernel_gateway.log contains "is available"
-while ! grep -q "at" /opendevin/logs/jupyter_kernel_gateway.log; do
+while ! grep -q "KernelGatewayApp" /opendevin/logs/jupyter_kernel_gateway.log; do
     echo "Waiting for Jupyter kernel gateway to be available..."
     sleep 1
 done
+# Extra wait to ensure gateway is ready to accept kernel creation requests
+sleep 3
 # Wait until /opendevin/logs/jupyter_execute_server.log contains "Jupyter kernel created for conversation"
-while ! grep -q "kernel created" /opendevin/logs/jupyter_execute_server.log; do
+while ! grep -q "kernel created" /opendevin/logs/jupyter_execute_server.log 2>/dev/null; do
     echo "Waiting for Jupyter kernel to be created..."
     sleep 1
 done

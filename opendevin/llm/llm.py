@@ -6,6 +6,7 @@ with warnings.catch_warnings():
     import litellm
 from litellm import completion as litellm_completion
 from litellm import completion_cost as litellm_completion_cost
+from litellm.caching import Cache
 from litellm.exceptions import (
     APIConnectionError,
     RateLimitError,
@@ -62,6 +63,8 @@ class LLM:
         llm_config=None,
         metrics=None,
         cost_metric_supported=True,
+        caching_enabled=None,
+        cache_dir=None,
     ):
         """
         Initializes the LLM. If LLMConfig is passed, its values will be the fallback.
@@ -117,6 +120,12 @@ class LLM:
             if max_output_tokens is not None
             else llm_config.max_output_tokens
         )
+        caching_enabled = (
+            caching_enabled
+            if caching_enabled is not None
+            else llm_config.caching_enabled
+        )
+        cache_dir = cache_dir if cache_dir is not None else llm_config.cache_dir
         metrics = metrics if metrics is not None else Metrics()
 
         logger.info(f'Initializing LLM with model: {model}')
@@ -156,9 +165,14 @@ class LLM:
                 # Enough tokens for most output actions, and not too many for a bad llm to get carried away responding
                 # with thousands of unwanted tokens
                 self.max_output_tokens = 1024
-        logger.warning(f"model_name: {self.model_name}; api_key: {self.api_key}; base_url: {self.base_url}; custom_llm_provider: {custom_llm_provider}")
-        self._completion = partial(
-            litellm_completion,
+        if caching_enabled:
+            litellm.cache = Cache(type='disk', disk_cache_dir=cache_dir)
+            logger.info(f'LLM disk cache enabled at {cache_dir}')
+
+        logger.warning(
+            f'model_name: {self.model_name}; api_key: {self.api_key}; base_url: {self.base_url}; custom_llm_provider: {custom_llm_provider}'
+        )
+        completion_kwargs: dict = dict(
             model=self.model_name,
             api_key=self.api_key,
             base_url=self.base_url,
@@ -167,8 +181,11 @@ class LLM:
             max_tokens=self.max_output_tokens,
             timeout=self.llm_timeout,
             temperature=llm_temperature,
-            top_p=llm_top_p,
+            caching=caching_enabled,
         )
+        if llm_top_p is not None:
+            completion_kwargs['top_p'] = llm_top_p
+        self._completion = partial(litellm_completion, **completion_kwargs)
 
         completion_unwrapped = self._completion
 

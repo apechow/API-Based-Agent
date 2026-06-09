@@ -245,22 +245,20 @@ def generate_from_openai_chat_completion(
     context_length: int,
     stop_token: str | None = None,
 ) -> str:
-    if 'OPENAI_API_KEY' not in os.environ:
-        raise ValueError(
-            'OPENAI_API_KEY environment variable must be set when using OpenAI API.'
-        )
-    openai.api_key = os.environ['OPENAI_API_KEY']
-    openai.organization = os.environ.get('OPENAI_ORGANIZATION', '')
-    client = openai.OpenAI(api_key=os.environ['OPENAI_API_KEY'])
+    import litellm
 
-    response = client.chat.completions.create(  # type: ignore
-        model=model,
+    from opendevin.core.config import config as od_config
+
+    litellm_kwargs: dict = dict(
+        model=od_config.llm.model,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
-        top_p=top_p,
-        stop=[stop_token] if stop_token else None,
+        api_key=od_config.llm.api_key,
     )
+    if od_config.llm.base_url:
+        litellm_kwargs['base_url'] = od_config.llm.base_url
+    response = litellm.completion(**litellm_kwargs)
     answer: str = response.choices[0].message.content
     return answer
 

@@ -1,0 +1,852 @@
+Below is some specific explanations and examples on how to use search and filter responses.
+# Notes on how to retrieve filtered responses from API calling
+
+Some API calls return dozens or even hundreds of parameters, and parsing through all this data can be unwieldy. To mitigate this issue, you can append `?fields=<field_or_object1>,<field_or_object2>,...` to any GET, POST, or PUT operation to filter unimportant information from the response. `<field_or_object>` can be any of the following:
+
+*  Simple top-level field
+*  Top-level object that includes all fields
+*  Top-level object with selected fields
+*  Nested objects
+
+Separate each field or object with a comma.
+
+On POST and PUT requests, Commerce ignores the `fields` parameter as input, but the response includes only the requested fields and objects.
+
+## Simple fields
+
+The following example returns only the `sku`, `price`, and `name` for the specified product:
+
+`GET <host>/rest/default/V1/products/24-MB01?fields=sku,price,name`
+
+```json
+{
+  "sku": "24-MB01"
+  "name": "Joust Duffle Bag"
+  "price": 24.99
+}
+```
+
+## Simple fields and top-level objects with all fields
+
+The following example returns only the customer first name, last name, and the entire `billing_address` object from a specified order. Do not include brackets `[]` after an object name when you want to return all of the object's contents.
+
+`GET <host>/rest/default/V1/orders/2?fields=billing_address,customer_firstname,customer_lastname`
+
+```json
+{
+"customer_firstname": "Veronica"
+"customer_lastname": "Costello"
+"billing_address": {
+  "address_type": "billing"
+  "city": "Calder"
+  "country_id": "US"
+  "customer_address_id": 1
+  "email": "roni_cost@example.com"
+  "entity_id": 4
+  "firstname": "Veronica"
+  "lastname": "Costello"
+  "parent_id": 2
+  "postcode": "49628-7978"
+  "region": "Michigan"
+  "region_code": "MI"
+  "region_id": 33
+  "street": "6146 Honey Bluff Parkway"
+  "telephone": "(555) 229-3326"
+  }
+}
+```
+
+## Top-level object with selected fields
+
+The following example returns only the `name`, `qty`, and `sku` fields defined in an `items` object from a specified shipment:
+
+`GET <host>/rest/default/V1/shipment/2?fields=items[name,qty,sku]`
+
+```json
+"items": [
+   {
+     "name": "Minerva LumaTech&trade; V-Tee-XS-Blue",
+     "qty": 1,
+     "sku": "WS08-XS-Blue",
+   }
+]
+```
+
+## Nested objects
+
+This example returns only the following:
+
+*  The product's `sku` and `name`
+*  The entire `category_links` object, which is defined in `extension_attributes`
+*  The `item_id` and `qty` fields of the `stock_item` object, which is also defined in `extension_attributes`
+
+`GET <host>/rest/default/V1/products/MT12?fields=name,sku,extension_attributes[category_links,stock_item[item_id,qty]]`
+
+```json
+{
+  "sku": "MT12"
+  "name": "Cassius Sparring Tank"
+  "extension_attributes": {
+    "category_links": {
+      "position": 1
+      "category_id": "18"
+    }
+    "stock_item": {
+      "item_id": 732
+      "qty": 0
+      }
+  }
+}
+```
+
+## POST operation
+
+The following POST operation and payload creates a catalog category named `New Category`. Commerce returns only the `id`, `parent_id`, and `name` attributes
+
+`POST <host>/rest/default/V1/categories?fields=id,parent_id,name`
+
+**Payload:**
+
+```json
+{
+  "category": {
+    "name": "New Category",
+    "is_active": true
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+"id": 43
+"parent_id": 2
+"name": "New Category"
+}
+```
+
+## Using with searchCriteria
+
+The `searchCriteria` query parameter allows you to search across multiple objects in a collection. You can use the `fields` query parameter in conjunction with `searchCriteria` to limit the output. The question mark (?) that precedes `fields` in all the other examples in this document is replaced with an ampersand (&amp;).
+
+For example, the following query returns only the `sku` and `name` parameters for product items whose `category_gear` attribute includes the value `86`.
+
+`GET <host>/rest/default/V1/products/?searchCriteria[filter_groups][0][filters][0][field]=category_gear&searchCriteria[filter_groups][0][filters][0][value]=86&searchCriteria[filter_groups][0][filters][0][condition_type]=finset&fields=items[sku,name]`
+
+```json
+{
+"items":
+  {
+    "sku": "24-MG04"
+    "name": "Aim Analog Watch"
+  }
+  {
+    "sku": "24-MG01"
+    "name": "Endurance Watch"
+  }
+}
+```
+# How to Search using REST endpoints
+
+POST, PUT, and DELETE requests to the REST Web API require the service method parameters to be in the body of the request. For example, to create a Customer, you would specify a JSON array (or XML structure) in the body of the message.
+
+For search APIs that invoke `searchCriteria` query parameters, the basic pattern for specifying the criteria is
+
+```http
+searchCriteria[filter_groups][<index>][filters][<index>][field]=<field_name>
+searchCriteria[filter_groups][<index>][filters][<index>][value]=<search_value>
+searchCriteria[filter_groups][<index>][filters][<index>][condition_type]=<operator>
+```
+
+where:
+
+*  `field` is an attribute name.
+*  `value` specifies the value to search for.
+*  `condition_type` is one of the following values:
+
+Condition | Notes
+--- | ---
+`eq` | Equals
+`finset` | A value within a set of values
+`from` | The beginning of a range. Must be used with `to`.
+`gt` | Greater than
+`gteq` |  Greater than or equal
+`in` | In. The `value` can contain a comma-separated list of values.
+`like` | Like. The `value` can contain the SQL wildcard characters when `like` is specified.
+`lt` | Less than
+`lteq` | Less than or equal
+`moreq` | More or equal
+`neq` | Not equal
+`nfinset` | A value that is not within a set of values.
+`nin` | Not in. The `value` can contain a comma-separated list of values.
+`nlike` | Not like
+`notnull` | Not null
+`null` | Null
+`to` | The end of a range. Must be used with `from`.
+
+
+`condition_type` is optional if the operator is `eq`.
+
+The `filter_groups` array defines one or more `filters`. Each filter defines a search term, and the `field`, `value`, and `condition_type` of a search term must be assigned the same index number, starting with 0. Increment additional terms as needed.
+
+When constructing a search, *THE FOLLOWING IS VERY IMPORTATNT*:
+
+*  To perform a logical `OR`, specify multiple `filters` within a `filter_groups`. For example `A==a OR A==b`, you should specify 2 `filter_groups`: searchCriteria[filter_groups][0][filters][0][field]=A, searchCriteria[filter_groups][0][filters][0][value]=a, and searchCriteria[filter_groups][0][filters][1][field]=A, searchCriteria[filter_groups][0][filters][1][value]=b.
+*  To perform a logical `AND`, you should specify multiple `filter_groups`. For example `A==a AND B==b`, you should specify 2 `filter_groups`: searchCriteria[filter_groups][0][filters][0][field]=A, searchCriteria[filter_groups][0][filters][0][value]=a, and searchCriteria[filter_groups][1][filters][0][field]=B, searchCriteria[filter_groups][1][filters][0][value]=b.
+*  You cannot perform a logical `OR` across different `filter_groups`, such as `(A AND B) OR (X AND Y)`. ORs can be performed only within the context of a single `filter_groups`.
+*  You can only search top-level attributes.
+
+## Simple search
+
+For example, the Magento Open Source sample data uses the `category_gear` field to describe the categories for each item listed under Gear on sample store. Each item can be assigned to multiple categories. Electronics are assigned the code 86. Then the following example returns all gear tagged as electronics.
+
+```http
+GET <host>/rest/default/V1/products/?
+searchCriteria[filter_groups][0][filters][0][field]=category_gear&
+searchCriteria[filter_groups][0][filters][0][value]=86&
+searchCriteria[filter_groups][0][filters][0][condition_type]=finset
+```
+
+## Simple search using a timestamp
+
+The following search finds all invoices created after the specified time (midnight, July 1 2016). You can set up a similar search to run periodically to poll for changes.
+
+```http
+GET <host>/rest/default/V1/invoices?
+searchCriteria[filter_groups][0][filters][0][field]=created_at&
+searchCriteria[filter_groups][0][filters][0][value]=2016-07-01 00:00:00&
+searchCriteria[filter_groups][0][filters][0][condition_type]=gt
+```
+
+## Simple search using an `in` conditions type
+
+The following search finds all the products that are provided in the value field. When you specify the `in` condition type, the value field must be a comma separated list.
+
+```http
+GET <host>/rest/default/V1/products?
+searchCriteria[filter_groups][0][filters][0][field]=entity_id&
+searchCriteria[filter_groups][0][filters][0][value]=1,2,3,4,5&
+searchCriteria[filter_groups][0][filters][0][condition_type]=in
+```
+
+### Logical OR search
+
+The following example searches for all products whose names contain the string `Leggings` or `Parachute`. The instances of `%25` in the example are converted into the SQL wildcard character `%`.
+
+```http
+GET <host>/rest/default/V1/products?
+searchCriteria[filter_groups][0][filters][0][field]=name&
+searchCriteria[filter_groups][0][filters][0][value]=%25Leggings%25&
+searchCriteria[filter_groups][0][filters][0][condition_type]=like&
+searchCriteria[filter_groups][0][filters][1][field]=name&
+searchCriteria[filter_groups][0][filters][1][value]=%25Parachute%25&
+searchCriteria[filter_groups][0][filters][1][condition_type]=like
+```
+
+### Logical AND search
+
+This sample searches for women's shorts that are size 31 and costs less than $30. For example, women's shorts have a `sku` value that begins with `WSH`. The `sku` also contains the size and color, such as `WSH02-31-Yellow`.
+
+```http
+GET <host>/rest/default/V1/products?
+searchCriteria[filter_groups][0][filters][0][field]=sku&
+searchCriteria[filter_groups][0][filters][0][value]=WSH%2531%25&
+searchCriteria[filter_groups][0][filters][0][condition_type]=like&
+searchCriteria[filter_groups][1][filters][0][field]=price&
+searchCriteria[filter_groups][1][filters][0][value]=30&
+searchCriteria[filter_groups][1][filters][0][condition_type]=lt
+```
+
+### Logical AND and OR search
+
+This sample is similar the Logical AND sample. It searches the `sku`s for women's shorts (WSH%) or pants (WP%)in size 29. The system performs two logical ANDs to restrict the results to those that cost from $40 to $49.99
+
+```http
+GET <host>/rest/default/V1/products?
+searchCriteria[filter_groups][0][filters][0][field]=sku&
+searchCriteria[filter_groups][0][filters][0][value]=WSH%2529%25&
+searchCriteria[filter_groups][0][filters][0][condition_type]=like&
+searchCriteria[filter_groups][0][filters][1][field]=sku&
+searchCriteria[filter_groups][0][filters][1][value]=WP%2529%25&
+searchCriteria[filter_groups][0][filters][1][condition_type]=like&
+searchCriteria[filter_groups][1][filters][0][field]=price&
+searchCriteria[filter_groups][1][filters][0][value]=40&
+searchCriteria[filter_groups][1][filters][0][condition_type]=from&
+searchCriteria[filter_groups][2][filters][0][field]=price&
+searchCriteria[filter_groups][2][filters][0][value]=49.99&
+searchCriteria[filter_groups][2][filters][0][condition_type]=to
+```
+
+## Other search criteria
+
+The following searchCriteria can be used to determine the sort order and the number of items to return.
+
+*  `searchCriteria[sortOrders][<index>][field]=<field-name>` - Specifies the field to sort on. By default, search results are returned in descending order. You can sort on multiple fields. For example, to sort on `price` first and then by `name`, call `searchCriteria[sortOrders][0][field]=price&searchCriteria[sortOrders][1][field]=name`.
+
+*  `searchCriteria[sortOrders][<index>][direction]=ASC | DESC` - Specifies whether to return results in ascending (ASC) or descending (DESC) order. To expand the previous example and sort the `price` fields in descending order and the `name` fields in ascending order, call `searchCriteria[sortOrders][0][field]=price&searchCriteria[sortOrders][1][field]=name&searchCriteria[sortOrders][1][direction]=ASC`.
+
+*  `searchCriteria[pageSize]` - Specifies the maximum number of items to return. The value must be an integer. If the `pageSize` is not specified, the system returns all matches.
+
+*  `searchCriteria[currentPage]` - Returns the current page.
+
+### Example for search criteria to determine the sort order and attributes to return
+
+This example shows how to use search criteria to determine the sort order and attributes to return. It returns orders with status `pending`.
+
+**Endpoint:**
+
+`GET <host>/rest/default/V1/orders/`
+
+**Headers:**
+
+`Content-Type` `application/json`
+`Authorization` `Bearer <token>`
+
+**Parameters:**
+
+Parameter | Value | Description
+--- | --- | ---
+searchCriteria[filter_groups][0][filters][0][field] | status | Attribute name to filter
+searchCriteria[filter_groups][0][filters][0][value] | pending | Attribute value to filter
+fields | items[increment_id,entity_id] | Attributes to return in the response. If you do not specify this parameter, all attributes will be returned.
+
+**Request:**
+
+```http
+GET <host>/rest/V1/orders?
+searchCriteria[filter_groups][0][filters][0][field]=status&
+searchCriteria[filter_groups][0][filters][0][value]=pending&
+searchCriteria[sortOrders][0][field]=increment_id&
+fields=items[increment_id,entity_id]
+```
+
+**Response:**
+
+```json
+{
+    "items": [
+        {
+            "entity_id": 3003,
+            "increment_id": "WA0003003"
+        }
+    ]
+}
+```
+# Create an order
+
+Suppose the shopping cart contains three items totaling $108. The shipping charges are $10, making the grand total $118. We're now ready to place an order.
+
+## Send payment information
+
+When you submit payment information, the Commerce creates an order and sends an order confirmation to the customer. Since we are using an offline payment method in this tutorial, we do not need to provide detailed payment information. The endpoint used in this example requires only the payment method and billing address information.
+
+**Endpoint:**
+`POST <host>/rest/default/V1/carts/mine/payment-information`
+
+**Headers:**
+`Content-Type: application/json`
+`Authorization: Bearer <customer token>`
+
+**Payload:**
+```json
+{
+  "paymentMethod": {
+    "method": "banktransfer"
+  },
+  "billing_address": {
+    "email": "jdoe@example.com",
+    "region": "New York",
+    "region_id": 43,
+    "region_code": "NY",
+    "country_id": "US",
+    "street": [
+      "123 Oak Ave"
+    ],
+    "postcode": "10577",
+    "city": "Purchase",
+    "telephone": "512-555-1111",
+    "firstname": "Jane",
+    "lastname": "Doe"
+  }
+}
+```
+
+**Response:**
+An `orderID`, such as `3`.
+
+# Review an order as an admin
+When you request an order object, the response contains full details about the order, including customer information, payment details, as well as totals and subtotals for the order and each individual item.
+
+**Endpoint:**
+`GET <host>/rest/default/V1/orders/3`
+where `3` is the `orderid`
+
+**Headers:**
+`Content-Type: application/json`
+`Authorization: Bearer <administrator token>`
+
+**Response:**
+```json
+{
+  "applied_rule_ids": "1",
+  "base_currency_code": "USD",
+  "base_discount_amount": 0,
+  "base_grand_total": 165,
+  "base_discount_tax_compensation_amount": 0,
+  "base_shipping_amount": 5,
+  "base_shipping_discount_amount": 0,
+  "base_shipping_incl_tax": 5,
+  "base_shipping_tax_amount": 0,
+  "base_subtotal": 160,
+  "base_subtotal_incl_tax": 160,
+  "base_tax_amount": 0,
+  "base_total_due": 165,
+  "base_to_global_rate": 1,
+  "base_to_order_rate": 1,
+  "billing_address_id": 6,
+  "created_at": "2017-08-21 22:22:19",
+  "customer_email": "jdoe@example.com",
+  "customer_firstname": "Jane",
+  "customer_group_id": 1,
+  "customer_id": 3,
+  "customer_is_guest": 0,
+  "customer_lastname": "Doe",
+  "customer_note_notify": 1,
+  "discount_amount": 0,
+  "email_sent": 1,
+  "entity_id": 3,
+  "global_currency_code": "USD",
+  "grand_total": 165,
+  "discount_tax_compensation_amount": 0,
+  "increment_id": "000000003",
+  "is_virtual": 0,
+  "order_currency_code": "USD",
+  "protect_code": "61f76d",
+  "quote_id": 4,
+  "shipping_amount": 5,
+  "shipping_description": "Best Way - Table Rate",
+  "shipping_discount_amount": 0,
+  "shipping_discount_tax_compensation_amount": 0,
+  "shipping_incl_tax": 5,
+  "shipping_tax_amount": 0,
+  "state": "new",
+  "status": "pending",
+  "store_currency_code": "USD",
+  "store_id": 1,
+  "store_name": "Main Website\nMain Website Store\n",
+  "store_to_base_rate": 0,
+  "store_to_order_rate": 0,
+  "subtotal": 160,
+  "subtotal_incl_tax": 160,
+  "tax_amount": 0,
+  "total_due": 165,
+  "total_item_count": 7,
+  "total_qty_ordered": 4,
+  "updated_at": "2017-08-21 22:22:20",
+  "weight": 2,
+  "items": [
+    {
+      "amount_refunded": 0,
+      "applied_rule_ids": "1",
+      "base_amount_refunded": 0,
+      "base_discount_amount": 0,
+      "base_discount_invoiced": 0,
+      "base_discount_tax_compensation_amount": 0,
+      "base_original_price": 22,
+      "base_price": 22,
+      "base_price_incl_tax": 22,
+      "base_row_invoiced": 0,
+      "base_row_total": 22,
+      "base_row_total_incl_tax": 22,
+      "base_tax_amount": 0,
+      "base_tax_invoiced": 0,
+      "created_at": "2017-08-21 22:22:19",
+      "discount_amount": 0,
+      "discount_invoiced": 0,
+      "discount_percent": 0,
+      "free_shipping": 0,
+      "discount_tax_compensation_amount": 0,
+      "is_qty_decimal": 0,
+      "is_virtual": 0,
+      "item_id": 3,
+      "name": "Radiant Tee-M-Orange",
+      "no_discount": 0,
+      "order_id": 3,
+      "original_price": 22,
+      "price": 22,
+      "price_incl_tax": 22,
+      "product_id": 1553,
+      "product_type": "simple",
+      "qty_canceled": 0,
+      "qty_invoiced": 0,
+      "qty_ordered": 1,
+      "qty_refunded": 0,
+      "qty_shipped": 0,
+      "quote_item_id": 6,
+      "row_invoiced": 0,
+      "row_total": 22,
+      "row_total_incl_tax": 22,
+      "row_weight": 1,
+      "sku": "WS12-M-Orange",
+      "store_id": 1,
+      "tax_amount": 0,
+      "tax_invoiced": 0,
+      "tax_percent": 0,
+      "updated_at": "2017-08-21 22:22:19",
+      "weight": 1
+    },
+    ...
+  ],
+  "billing_address": {
+    "address_type": "billing",
+    "city": "Purchase",
+    "country_id": "US",
+    "email": "jdoe@example.com",
+    "entity_id": 6,
+    "firstname": "Jane",
+    "lastname": "Doe",
+    "parent_id": 3,
+    "postcode": "10577",
+    "region": "New York",
+    "region_code": "NY",
+    "region_id": 43,
+    "street": [
+      "123 Oak Ave"
+    ],
+    "telephone": "512-555-1111"
+  },
+  "payment": {
+    "account_status": null,
+    "additional_information": [
+      "Bank Transfer Payment",
+      ""
+    ],
+    "amount_ordered": 165,
+    "base_amount_ordered": 165,
+    "base_shipping_amount": 5,
+    "cc_last4": null,
+    "entity_id": 3,
+    "method": "banktransfer",
+    "parent_id": 3,
+    "shipping_amount": 5
+  },
+  "status_histories": [],
+  "extension_attributes": {
+    "shipping_assignments": [
+      {
+        "shipping": {
+          "address": {
+            "address_type": "shipping",
+            "city": "Purchase",
+            "country_id": "US",
+            "email": "jdoe@example.com",
+            "entity_id": 5,
+            "firstname": "Jane",
+            "lastname": "Doe",
+            "parent_id": 3,
+            "postcode": "10577",
+            "region": "New York",
+            "region_code": "NY",
+            "region_id": 43,
+            "street": [
+              "123 Oak Ave"
+            ],
+            "telephone": "512-555-1111"
+          },
+          "method": "tablerate_bestway",
+          "total": {
+            "base_shipping_amount": 5,
+            "base_shipping_discount_amount": 0,
+            "base_shipping_incl_tax": 5,
+            "base_shipping_tax_amount": 0,
+            "shipping_amount": 5,
+            "shipping_discount_amount": 0,
+            "shipping_discount_tax_compensation_amount": 0,
+            "shipping_incl_tax": 5,
+            "shipping_tax_amount": 0
+          }
+        },
+        "items": [
+          {
+            "amount_refunded": 0,
+            "applied_rule_ids": "1",
+            "base_amount_refunded": 0,
+            "base_discount_amount": 0,
+            "base_discount_invoiced": 0,
+            "base_discount_tax_compensation_amount": 0,
+            "base_original_price": 22,
+            "base_price": 22,
+            "base_price_incl_tax": 22,
+            "base_row_invoiced": 0,
+            "base_row_total": 22,
+            "base_row_total_incl_tax": 22,
+            "base_tax_amount": 0,
+            "base_tax_invoiced": 0,
+            "created_at": "2017-08-21 22:22:19",
+            "discount_amount": 0,
+            "discount_invoiced": 0,
+            "discount_percent": 0,
+            "free_shipping": 0,
+            "discount_tax_compensation_amount": 0,
+            "is_qty_decimal": 0,
+            "is_virtual": 0,
+            "item_id": 3,
+            "name": "Radiant Tee-M-Orange",
+            "no_discount": 0,
+            "order_id": 3,
+            "original_price": 22,
+            "price": 22,
+            "price_incl_tax": 22,
+            "product_id": 1553,
+            "product_type": "simple",
+            "qty_canceled": 0,
+            "qty_invoiced": 0,
+            "qty_ordered": 1,
+            "qty_refunded": 0,
+            "qty_shipped": 0,
+            "quote_item_id": 6,
+            "row_invoiced": 0,
+            "row_total": 22,
+            "row_total_incl_tax": 22,
+            "row_weight": 1,
+            "sku": "WS12-M-Orange",
+            "store_id": 1,
+            "tax_amount": 0,
+            "tax_invoiced": 0,
+            "tax_percent": 0,
+            "updated_at": "2017-08-21 22:22:19",
+            "weight": 1
+          },
+          ...
+        ]
+      }
+    ]
+  }
+}
+```
+# Set shipping and billing information
+
+In this call, you can specify or change the shipping and billing addresses, as well as the selected `carrier_code` and `method_code`. `carrier_code` could be either `tablerate` or `flatrate`. `method_code` could be either `bestway`, `tablerate`, or `flatrate`.
+
+This API returns a list of payment options and calculates the order totals.
+
+**Endpoint:**
+`POST <host>/rest/default/V1/carts/mine/shipping-information`
+
+**Headers:**
+`Content-Type: application/json`
+`Authorization: Bearer <customer token>`
+
+**Payload:**
+```json
+{
+  "addressInformation": {
+    "shipping_address": {
+      "region": "New York",
+      "region_id": 43,
+      "region_code": "NY",
+      "country_id": "US",
+      "street": [
+        "123 Oak Ave"
+      ],
+      "postcode": "10577",
+      "city": "Purchase",
+      "firstname": "Jane",
+      "lastname": "Doe",
+      "email": "jdoe@example.com",
+      "telephone": "512-555-1111"
+    },
+    "billing_address": {
+      "region": "New York",
+      "region_id": 43,
+      "region_code": "NY",
+      "country_id": "US",
+      "street": [
+        "123 Oak Ave"
+      ],
+      "postcode": "10577",
+      "city": "Purchase",
+      "firstname": "Jane",
+      "lastname": "Doe",
+      "email": "jdoe@example.com",
+      "telephone": "512-555-1111"
+    },
+    "shipping_carrier_code": "tablerate",
+    "shipping_method_code": "bestway"
+  }
+}
+```
+
+**Response:**
+The subtotal of the order is $160, and shipping charges are $5. The grand total is $165.
+
+The available payment methods are `banktransfer` and `checkmo`. The customer will specify a payment method in the next step.
+```json
+{
+  "payment_methods": [
+    {
+      "code": "cashondelivery",
+      "title": "Cash On Delivery"
+    },
+    {
+      "code": "banktransfer",
+      "title": "Bank Transfer Payment"
+    },
+    {
+      "code": "purchaseorder",
+      "title": "Purchase Order"
+    },
+    {
+      "code": "checkmo",
+      "title": "Check / Money order"
+    }
+  ],
+  "totals": {
+    "grand_total": 165,
+    "base_grand_total": 165,
+    "subtotal": 160,
+    "base_subtotal": 160,
+    "discount_amount": 0,
+    "base_discount_amount": 0,
+    "subtotal_with_discount": 160,
+    "base_subtotal_with_discount": 160,
+    "shipping_amount": 5,
+    "base_shipping_amount": 5,
+    "shipping_discount_amount": 0,
+    "base_shipping_discount_amount": 0,
+    "tax_amount": 0,
+    "base_tax_amount": 0,
+    "weee_tax_applied_amount": null,
+    "shipping_tax_amount": 0,
+    "base_shipping_tax_amount": 0,
+    "subtotal_incl_tax": 160,
+    "shipping_incl_tax": 5,
+    "base_shipping_incl_tax": 5,
+    "base_currency_code": "USD",
+    "quote_currency_code": "USD",
+    "items_qty": 4,
+    "items": [
+      {
+        "item_id": 6,
+        "price": 22,
+        "base_price": 22,
+        "qty": 1,
+        "row_total": 22,
+        "base_row_total": 22,
+        "row_total_with_discount": 0,
+        "tax_amount": 0,
+        "base_tax_amount": 0,
+        "tax_percent": 0,
+        "discount_amount": 0,
+        "base_discount_amount": 0,
+        "discount_percent": 0,
+        "price_incl_tax": 22,
+        "base_price_incl_tax": 22,
+        "row_total_incl_tax": 22,
+        "base_row_total_incl_tax": 22,
+        "options": "[]",
+        "weee_tax_applied_amount": null,
+        "weee_tax_applied": null,
+        "name": "Radiant Tee-M-Orange"
+      },
+      {
+        "item_id": 7,
+        "price": 18,
+        "base_price": 18,
+        "qty": 1,
+        "row_total": 18,
+        "base_row_total": 18,
+        "row_total_with_discount": 0,
+        "tax_amount": 0,
+        "base_tax_amount": 0,
+        "tax_percent": 0,
+        "discount_amount": 0,
+        "base_discount_amount": 0,
+        "discount_percent": 0,
+        "price_incl_tax": 18,
+        "base_price_incl_tax": 18,
+        "row_total_incl_tax": 18,
+        "base_row_total_incl_tax": 18,
+        "options": "[{\"value\":\"Advanced Pilates & Yoga (Strength)\",\"label\":\"Downloads\"}]",
+        "weee_tax_applied_amount": null,
+        "weee_tax_applied": null,
+        "name": "Advanced Pilates & Yoga (Strength)"
+      },
+      {
+        "item_id": 8,
+        "price": 68,
+        "base_price": 68,
+        "qty": 1,
+        "row_total": 68,
+        "base_row_total": 68,
+        "row_total_with_discount": 0,
+        "tax_amount": 0,
+        "base_tax_amount": 0,
+        "discount_amount": 0,
+        "base_discount_amount": 0,
+        "discount_percent": 0,
+        "price_incl_tax": 68,
+        "base_price_incl_tax": 68,
+        "row_total_incl_tax": 68,
+        "base_row_total_incl_tax": 68,
+        "options": "[{\"value\":\"1 x Sprite Stasis Ball 65 cm <span class=\\\"price\\\">$27.00<\\/span>\",\"label\":\"Sprite Stasis Ball\"},{\"value\":\"1 x Sprite Foam Yoga Brick <span class=\\\"price\\\">$5.00<\\/span>\",\"label\":\"Sprite Foam Yoga Brick\"},{\"value\":\"1 x Sprite Yoga Strap 8 foot <span class=\\\"price\\\">$17.00<\\/span>\",\"label\":\"Sprite Yoga Strap\"},{\"value\":\"1 x Sprite Foam Roller <span class=\\\"price\\\">$19.00<\\/span>\",\"label\":\"Sprite Foam Roller\"}]",
+        "weee_tax_applied_amount": null,
+        "weee_tax_applied": null,
+        "name": "Sprite Yoga Companion Kit"
+      },
+      {
+        "item_id": 13,
+        "price": 52,
+        "base_price": 52,
+        "qty": 1,
+        "row_total": 52,
+        "base_row_total": 52,
+        "row_total_with_discount": 0,
+        "tax_amount": 0,
+        "base_tax_amount": 0,
+        "tax_percent": 0,
+        "discount_amount": 0,
+        "base_discount_amount": 0,
+        "discount_percent": 0,
+        "price_incl_tax": 52,
+        "base_price_incl_tax": 52,
+        "row_total_incl_tax": 52,
+        "base_row_total_incl_tax": 52,
+        "options": "[{\"value\":\"Gray\",\"label\":\"Color\"},{\"value\":\"S\",\"label\":\"Size\"}]",
+        "weee_tax_applied_amount": null,
+        "weee_tax_applied": null,
+        "name": "Chaz Kangeroo Hoodie"
+      }
+    ],
+    "total_segments": [
+      {
+        "code": "subtotal",
+        "title": "Subtotal",
+        "value": 160
+      },
+      {
+        "code": "shipping",
+        "title": "Shipping & Handling (Best Way - Table Rate)",
+        "value": 5
+      },
+      {
+        "code": "tax",
+        "title": "Tax",
+        "value": 0,
+        "extension_attributes": {
+          "tax_grandtotal_details": []
+        }
+      },
+      {
+        "code": "grand_total",
+        "title": "Grand Total",
+        "value": 165,
+        "area": "footer"
+      }
+    ]
+  }
+}
+```
+
+{'server_url': 'http://host.docker.internal:7780/rest/default', 'paths': {'/V1/orders': {'get': {'description': 'Lists orders that match specified search criteria. This call returns an array of objects, but detailed information about each object’s attributes might not be included. See https://developer.adobe.com/commerce/webapi/rest/attributes#OrderRepositoryInterface to determine which call to use to get detailed information about all attributes for an object.', 'parameters': [{'name': 'searchCriteria[filterGroups][0][filters][0][field]', 'in': 'query', 'description': 'Field', 'schema': {'type': 'string'}}, {'name': 'searchCriteria[filterGroups][0][filters][0][value]', 'in': 'query', 'description': 'Value', 'schema': {'type': 'string'}}, {'name': 'searchCriteria[filterGroups][0][filters][0][conditionType]', 'in': 'query', 'description': 'Condition type', 'schema': {'type': 'string'}}, {'name': 'searchCriteria[sortOrders][0][field]', 'in': 'query', 'description': 'Sorting field.', 'schema': {'type': 'string'}}, {'name': 'searchCriteria[sortOrders][0][direction]', 'in': 'query', 'description': 'Sorting direction.', 'schema': {'type': 'string'}}, {'name': 'searchCriteria[pageSize]', 'in': 'query', 'description': 'Page size.', 'schema': {'type': 'integer'}}, {'name': 'searchCriteria[currentPage]', 'in': 'query', 'description': 'Current page.', 'schema': {'type': 'integer'}}], 'responses': {'200': {'description': '200 Success.', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/sales-data-order-search-result-interface'}}}}, '401': {'description': '401 Unauthorized', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/error-response'}}}}, 'default': {'description': 'Unexpected error', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/error-response'}}}}}}}}, 'components': {'error-response': {'type': 'object', 'properties': {'message': {'type': 'string', 'description': 'Error message'}, 'errors': {'$ref': '#/components/schemas/error-errors'}, 'code': {'type': 'integer', 'description': 'Error code'}, 'parameters': {'$ref': '#/components/schemas/error-parameters'}, 'trace': {'type': 'string', 'description': 'Stack trace'}}, 'required': ['message']}, 'error-errors': {'type': 'array', 'description': 'Errors list', 'items': {'$ref': '#/components/schemas/error-errors-item'}}, 'error-errors-item': {'type': 'object', 'description': 'Error details', 'properties': {'message': {'type': 'string', 'description': 'Error message'}, 'parameters': {'$ref': '#/components/schemas/error-parameters'}}}, 'error-parameters': {'type': 'array', 'description': 'Error parameters list', 'items': {'$ref': '#/components/schemas/error-parameters-item'}}, 'error-parameters-item': {'type': 'object', 'description': 'Error parameters item', 'properties': {'resources': {'type': 'string', 'description': 'ACL resource'}, 'fieldName': {'type': 'string', 'description': 'Missing or invalid field name'}, 'fieldValue': {'type': 'string', 'description': 'Incorrect field value'}}}, 'sales-data-order-search-result-interface': {'type': 'object', 'description': 'Order search result interface. An order is a document that a web store issues to a customer. Magento generates a sales order that lists the product items, billing and shipping addresses, and shipping and payment methods. A corresponding external document, known as a purchase order, is emailed to the customer.', 'properties': {'items': {'type': 'array', 'description': 'Array of collection items.', 'items': {'$ref': '#/components/schemas/sales-data-order-interface'}}, 'search_criteria': {'$ref': '#/components/schemas/framework-search-criteria-interface'}, 'total_count': {'type': 'integer', 'description': 'Total count.'}}, 'required': ['items', 'search_criteria', 'total_count']}, 'framework-search-criteria-interface': {'type': 'object', 'description': 'Search criteria interface.', 'properties': {'filter_groups': {'type': 'array', 'description': 'A list of filter groups.', 'items': {'$ref': '#/components/schemas/framework-search-filter-group'}}, 'sort_orders': {'type': 'array', 'description': 'Sort order.', 'items': {'$ref': '#/components/schemas/framework-sort-order'}}, 'page_size': {'type': 'integer', 'description': 'Page size.'}, 'current_page': {'type': 'integer', 'description': 'Current page.'}}, 'required': ['filter_groups']}, 'sales-data-order-interface': {'type': 'object', 'description': 'Order interface. An order is a document that a web store issues to a customer. Magento generates a sales order that lists the product items, billing and shipping addresses, and shipping and payment methods. A corresponding external document, known as a purchase order, is emailed to the customer.', 'properties': {'adjustment_negative': {'type': 'number', 'description': 'Negative adjustment value.'}, 'adjustment_positive': {'type': 'number', 'description': 'Positive adjustment value.'}, 'applied_rule_ids': {'type': 'string', 'description': 'Applied rule IDs.'}, 'base_adjustment_negative': {'type': 'number', 'description': 'Base negative adjustment value.'}, 'base_adjustment_positive': {'type': 'number', 'description': 'Base positive adjustment value.'}, 'base_currency_code': {'type': 'string', 'description': 'Base currency code.'}, 'base_discount_amount': {'type': 'number', 'description': 'Base discount amount.'}, 'base_discount_canceled': {'type': 'number', 'description': 'Base discount canceled.'}, 'base_discount_invoiced': {'type': 'number', 'description': 'Base discount invoiced.'}, 'base_discount_refunded': {'type': 'number', 'description': 'Base discount refunded.'}, 'base_grand_total': {'type': 'number', 'description': 'Base grand total.'}, 'base_discount_tax_compensation_amount': {'type': 'number', 'description': 'Base discount tax compensation amount.'}, 'base_discount_tax_compensation_invoiced': {'type': 'number', 'description': 'Base discount tax compensation invoiced.'}, 'base_discount_tax_compensation_refunded': {'type': 'number', 'description': 'Base discount tax compensation refunded.'}, 'base_shipping_amount': {'type': 'number', 'description': 'Base shipping amount.'}, 'base_shipping_canceled': {'type': 'number', 'description': 'Base shipping canceled.'}, 'base_shipping_discount_amount': {'type': 'number', 'description': 'Base shipping discount amount.'}, 'base_shipping_discount_tax_compensation_amnt': {'type': 'number', 'description': 'Base shipping discount tax compensation amount.'}, 'base_shipping_incl_tax': {'type': 'number', 'description': 'Base shipping including tax.'}, 'base_shipping_invoiced': {'type': 'number', 'description': 'Base shipping invoiced.'}, 'base_shipping_refunded': {'type': 'number', 'description': 'Base shipping refunded.'}, 'base_shipping_tax_amount': {'type': 'number', 'description': 'Base shipping tax amount.'}, 'base_shipping_tax_refunded': {'type': 'number', 'description': 'Base shipping tax refunded.'}, 'base_subtotal': {'type': 'number', 'description': 'Base subtotal.'}, 'base_subtotal_canceled': {'type': 'number', 'description': 'Base subtotal canceled.'}, 'base_subtotal_incl_tax': {'type': 'number', 'description': 'Base subtotal including tax.'}, 'base_subtotal_invoiced': {'type': 'number', 'description': 'Base subtotal invoiced.'}, 'base_subtotal_refunded': {'type': 'number', 'description': 'Base subtotal refunded.'}, 'base_tax_amount': {'type': 'number', 'description': 'Base tax amount.'}, 'base_tax_canceled': {'type': 'number', 'description': 'Base tax canceled.'}, 'base_tax_invoiced': {'type': 'number', 'description': 'Base tax invoiced.'}, 'base_tax_refunded': {'type': 'number', 'description': 'Base tax refunded.'}, 'base_total_canceled': {'type': 'number', 'description': 'Base total canceled.'}, 'base_total_due': {'type': 'number', 'description': 'Base total due.'}, 'base_total_invoiced': {'type': 'number', 'description': 'Base total invoiced.'}, 'base_total_invoiced_cost': {'type': 'number', 'description': 'Base total invoiced cost.'}, 'base_total_offline_refunded': {'type': 'number', 'description': 'Base total offline refunded.'}, 'base_total_online_refunded': {'type': 'number', 'description': 'Base total online refunded.'}, 'base_total_paid': {'type': 'number', 'description': 'Base total paid.'}, 'base_total_qty_ordered': {'type': 'number', 'description': 'Base total quantity ordered.'}, 'base_total_refunded': {'type': 'number', 'description': 'Base total refunded.'}, 'base_to_global_rate': {'type': 'number', 'description': 'Base-to-global rate.'}, 'base_to_order_rate': {'type': 'number', 'description': 'Base-to-order rate.'}, 'billing_address_id': {'type': 'integer', 'description': 'Billing address ID.'}, 'can_ship_partially': {'type': 'integer', 'description': 'Can-ship-partially flag value.'}, 'can_ship_partially_item': {'type': 'integer', 'description': 'Can-ship-partially-item flag value.'}, 'coupon_code': {'type': 'string', 'description': 'Coupon code.'}, 'created_at': {'type': 'string', 'description': 'Created-at timestamp.'}, 'customer_dob': {'type': 'string', 'description': 'In keeping with current security and privacy best practices, be sure you are aware of any potential legal and security risks associated with the storage of customers’ full date of birth (month, day, year) along with other personal identifiers (e.g., full name) before collecting or processing such data.'}, 'customer_email': {'type': 'string', 'description': 'Customer email address.'}, 'customer_firstname': {'type': 'string', 'description': 'Customer first name.'}, 'customer_gender': {'type': 'integer', 'description': 'Customer gender.'}, 'customer_group_id': {'type': 'integer', 'description': 'Customer group ID.'}, 'customer_id': {'type': 'integer', 'description': 'Customer ID.'}, 'customer_is_guest': {'type': 'integer', 'description': 'Customer-is-guest flag value.'}, 'customer_lastname': {'type': 'string', 'description': 'Customer last name.'}, 'customer_middlename': {'type': 'string', 'description': 'Customer middle name.'}, 'customer_note': {'type': 'string', 'description': 'Customer note.'}, 'customer_note_notify': {'type': 'integer', 'description': 'Customer-note-notify flag value.'}, 'customer_prefix': {'type': 'string', 'description': 'Customer prefix.'}, 'customer_suffix': {'type': 'string', 'description': 'Customer suffix.'}, 'customer_taxvat': {'type': 'string', 'description': 'Customer value-added tax (VAT).'}, 'discount_amount': {'type': 'number', 'description': 'Discount amount.'}, 'discount_canceled': {'type': 'number', 'description': 'Discount canceled.'}, 'discount_description': {'type': 'string', 'description': 'Discount description.'}, 'discount_invoiced': {'type': 'number', 'description': 'Discount invoiced.'}, 'discount_refunded': {'type': 'number', 'description': 'Discount refunded amount.'}, 'edit_increment': {'type': 'integer', 'description': 'Edit increment value.'}, 'email_sent': {'type': 'integer', 'description': 'Email-sent flag value.'}, 'entity_id': {'type': 'integer', 'description': 'Order ID.'}, 'ext_customer_id': {'type': 'string', 'description': 'External customer ID.'}, 'ext_order_id': {'type': 'string', 'description': 'External order ID.'}, 'forced_shipment_with_invoice': {'type': 'integer', 'description': 'Forced-shipment-with-invoice flag value.'}, 'global_currency_code': {'type': 'string', 'description': 'Global currency code.'}, 'grand_total': {'type': 'number', 'description': 'Grand total.'}, 'discount_tax_compensation_amount': {'type': 'number', 'description': 'Discount tax compensation amount.'}, 'discount_tax_compensation_invoiced': {'type': 'number', 'description': 'Discount tax compensation invoiced amount.'}, 'discount_tax_compensation_refunded': {'type': 'number', 'description': 'Discount tax compensation refunded amount.'}, 'hold_before_state': {'type': 'string', 'description': 'Hold before state.'}, 'hold_before_status': {'type': 'string', 'description': 'Hold before status.'}, 'increment_id': {'type': 'string', 'description': 'Increment ID.'}, 'is_virtual': {'type': 'integer', 'description': 'Is-virtual flag value.'}, 'order_currency_code': {'type': 'string', 'description': 'Order currency code.'}, 'original_increment_id': {'type': 'string', 'description': 'Original increment ID.'}, 'payment_authorization_amount': {'type': 'number', 'description': 'Payment authorization amount.'}, 'payment_auth_expiration': {'type': 'integer', 'description': 'Payment authorization expiration date.'}, 'protect_code': {'type': 'string', 'description': 'Protect code.'}, 'quote_address_id': {'type': 'integer', 'description': 'Quote address ID.'}, 'quote_id': {'type': 'integer', 'description': 'Quote ID.'}, 'relation_child_id': {'type': 'string', 'description': 'Relation child ID.'}, 'relation_child_real_id': {'type': 'string', 'description': 'Relation child real ID.'}, 'relation_parent_id': {'type': 'string', 'description': 'Relation parent ID.'}, 'relation_parent_real_id': {'type': 'string', 'description': 'Relation parent real ID.'}, 'remote_ip': {'type': 'string', 'description': 'Remote IP address.'}, 'shipping_amount': {'type': 'number', 'description': 'Shipping amount.'}, 'shipping_canceled': {'type': 'number', 'description': 'Shipping canceled amount.'}, 'shipping_description': {'type': 'string', 'description': 'Shipping description.'}, 'shipping_discount_amount': {'type': 'number', 'description': 'Shipping discount amount.'}, 'shipping_discount_tax_compensation_amount': {'type': 'number', 'description': 'Shipping discount tax compensation amount.'}, 'shipping_incl_tax': {'type': 'number', 'description': 'Shipping including tax amount.'}, 'shipping_invoiced': {'type': 'number', 'description': 'Shipping invoiced amount.'}, 'shipping_refunded': {'type': 'number', 'description': 'Shipping refunded amount.'}, 'shipping_tax_amount': {'type': 'number', 'description': 'Shipping tax amount.'}, 'shipping_tax_refunded': {'type': 'number', 'description': 'Shipping tax refunded amount.'}, 'state': {'type': 'string', 'description': 'State.'}, 'status': {'type': 'string', 'description': 'Status.'}, 'store_currency_code': {'type': 'string', 'description': 'Store currency code.'}, 'store_id': {'type': 'integer', 'description': 'Store ID.'}, 'store_name': {'type': 'string', 'description': 'Store name.'}, 'store_to_base_rate': {'type': 'number', 'description': 'Store-to-base rate.'}, 'store_to_order_rate': {'type': 'number', 'description': 'Store-to-order rate.'}, 'subtotal': {'type': 'number', 'description': 'Subtotal.'}, 'subtotal_canceled': {'type': 'number', 'description': 'Subtotal canceled amount.'}, 'subtotal_incl_tax': {'type': 'number', 'description': 'Subtotal including tax amount.'}, 'subtotal_invoiced': {'type': 'number', 'description': 'Subtotal invoiced amount.'}, 'subtotal_refunded': {'type': 'number', 'description': 'Subtotal refunded amount.'}, 'tax_amount': {'type': 'number', 'description': 'Tax amount.'}, 'tax_canceled': {'type': 'number', 'description': 'Tax canceled amount.'}, 'tax_invoiced': {'type': 'number', 'description': 'Tax invoiced amount.'}, 'tax_refunded': {'type': 'number', 'description': 'Tax refunded amount.'}, 'total_canceled': {'type': 'number', 'description': 'Total canceled.'}, 'total_due': {'type': 'number', 'description': 'Total due.'}, 'total_invoiced': {'type': 'number', 'description': 'Total invoiced amount.'}, 'total_item_count': {'type': 'integer', 'description': 'Total item count.'}, 'total_offline_refunded': {'type': 'number', 'description': 'Total offline refunded amount.'}, 'total_online_refunded': {'type': 'number', 'description': 'Total online refunded amount.'}, 'total_paid': {'type': 'number', 'description': 'Total paid.'}, 'total_qty_ordered': {'type': 'number', 'description': 'Total quantity ordered.'}, 'total_refunded': {'type': 'number', 'description': 'Total amount refunded.'}, 'updated_at': {'type': 'string', 'description': 'Updated-at timestamp.'}, 'weight': {'type': 'number', 'description': 'Weight.'}, 'x_forwarded_for': {'type': 'string', 'description': 'X-Forwarded-For field value.'}, 'items': {'type': 'array', 'description': 'Array of items.', 'items': {'$ref': '#/components/schemas/sales-data-order-item-interface'}}, 'billing_address': {'$ref': '#/components/schemas/sales-data-order-address-interface'}, 'payment': {'$ref': '#/components/schemas/sales-data-order-payment-interface'}, 'status_histories': {'type': 'array', 'description': 'Array of status histories.', 'items': {'$ref': '#/components/schemas/sales-data-order-status-history-interface'}}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-order-extension-interface'}}, 'required': ['base_grand_total', 'customer_email', 'grand_total', 'items']}, 'sales-data-order-item-interface': {'type': 'object', 'description': 'Order item interface. An order is a document that a web store issues to a customer. Magento generates a sales order that lists the product items, billing and shipping addresses, and shipping and payment methods. A corresponding external document, known as a purchase order, is emailed to the customer.', 'properties': {'additional_data': {'type': 'string', 'description': 'Additional data.'}, 'amount_refunded': {'type': 'number', 'description': 'Amount refunded.'}, 'applied_rule_ids': {'type': 'string', 'description': 'Applied rule IDs.'}, 'base_amount_refunded': {'type': 'number', 'description': 'Base amount refunded.'}, 'base_cost': {'type': 'number', 'description': 'Base cost.'}, 'base_discount_amount': {'type': 'number', 'description': 'Base discount amount.'}, 'base_discount_invoiced': {'type': 'number', 'description': 'Base discount invoiced.'}, 'base_discount_refunded': {'type': 'number', 'description': 'Base discount refunded.'}, 'base_discount_tax_compensation_amount': {'type': 'number', 'description': 'Base discount tax compensation amount.'}, 'base_discount_tax_compensation_invoiced': {'type': 'number', 'description': 'Base discount tax compensation invoiced.'}, 'base_discount_tax_compensation_refunded': {'type': 'number', 'description': 'Base discount tax compensation refunded.'}, 'base_original_price': {'type': 'number', 'description': 'Base original price.'}, 'base_price': {'type': 'number', 'description': 'Base price.'}, 'base_price_incl_tax': {'type': 'number', 'description': 'Base price including tax.'}, 'base_row_invoiced': {'type': 'number', 'description': 'Base row invoiced.'}, 'base_row_total': {'type': 'number', 'description': 'Base row total.'}, 'base_row_total_incl_tax': {'type': 'number', 'description': 'Base row total including tax.'}, 'base_tax_amount': {'type': 'number', 'description': 'Base tax amount.'}, 'base_tax_before_discount': {'type': 'number', 'description': 'Base tax before discount.'}, 'base_tax_invoiced': {'type': 'number', 'description': 'Base tax invoiced.'}, 'base_tax_refunded': {'type': 'number', 'description': 'Base tax refunded.'}, 'base_weee_tax_applied_amount': {'type': 'number', 'description': 'Base WEEE tax applied amount.'}, 'base_weee_tax_applied_row_amnt': {'type': 'number', 'description': 'Base WEEE tax applied row amount.'}, 'base_weee_tax_disposition': {'type': 'number', 'description': 'Base WEEE tax disposition.'}, 'base_weee_tax_row_disposition': {'type': 'number', 'description': 'Base WEEE tax row disposition.'}, 'created_at': {'type': 'string', 'description': 'Created-at timestamp.'}, 'description': {'type': 'string', 'description': 'Description.'}, 'discount_amount': {'type': 'number', 'description': 'Discount amount.'}, 'discount_invoiced': {'type': 'number', 'description': 'Discount invoiced.'}, 'discount_percent': {'type': 'number', 'description': 'Discount percent.'}, 'discount_refunded': {'type': 'number', 'description': 'Discount refunded.'}, 'event_id': {'type': 'integer', 'description': 'Event ID.'}, 'ext_order_item_id': {'type': 'string', 'description': 'External order item ID.'}, 'free_shipping': {'type': 'integer', 'description': 'Free-shipping flag value.'}, 'gw_base_price': {'type': 'number', 'description': 'GW base price.'}, 'gw_base_price_invoiced': {'type': 'number', 'description': 'GW base price invoiced.'}, 'gw_base_price_refunded': {'type': 'number', 'description': 'GW base price refunded.'}, 'gw_base_tax_amount': {'type': 'number', 'description': 'GW base tax amount.'}, 'gw_base_tax_amount_invoiced': {'type': 'number', 'description': 'GW base tax amount invoiced.'}, 'gw_base_tax_amount_refunded': {'type': 'number', 'description': 'GW base tax amount refunded.'}, 'gw_id': {'type': 'integer', 'description': 'GW ID.'}, 'gw_price': {'type': 'number', 'description': 'GW price.'}, 'gw_price_invoiced': {'type': 'number', 'description': 'GW price invoiced.'}, 'gw_price_refunded': {'type': 'number', 'description': 'GW price refunded.'}, 'gw_tax_amount': {'type': 'number', 'description': 'GW tax amount.'}, 'gw_tax_amount_invoiced': {'type': 'number', 'description': 'GW tax amount invoiced.'}, 'gw_tax_amount_refunded': {'type': 'number', 'description': 'GW tax amount refunded.'}, 'discount_tax_compensation_amount': {'type': 'number', 'description': 'Discount tax compensation amount.'}, 'discount_tax_compensation_canceled': {'type': 'number', 'description': 'Discount tax compensation canceled.'}, 'discount_tax_compensation_invoiced': {'type': 'number', 'description': 'Discount tax compensation invoiced.'}, 'discount_tax_compensation_refunded': {'type': 'number', 'description': 'Discount tax compensation refunded.'}, 'is_qty_decimal': {'type': 'integer', 'description': 'Is-quantity-decimal flag value.'}, 'is_virtual': {'type': 'integer', 'description': 'Is-virtual flag value.'}, 'item_id': {'type': 'integer', 'description': 'Item ID.'}, 'locked_do_invoice': {'type': 'integer', 'description': 'Locked DO invoice flag value.'}, 'locked_do_ship': {'type': 'integer', 'description': 'Locked DO ship flag value.'}, 'name': {'type': 'string', 'description': 'Name.'}, 'no_discount': {'type': 'integer', 'description': 'No-discount flag value.'}, 'order_id': {'type': 'integer', 'description': 'Order ID.'}, 'original_price': {'type': 'number', 'description': 'Original price.'}, 'parent_item_id': {'type': 'integer', 'description': 'Parent item ID.'}, 'price': {'type': 'number', 'description': 'Price.'}, 'price_incl_tax': {'type': 'number', 'description': 'Price including tax.'}, 'product_id': {'type': 'integer', 'description': 'Product ID.'}, 'product_type': {'type': 'string', 'description': 'Product type.'}, 'qty_backordered': {'type': 'number', 'description': 'Quantity backordered.'}, 'qty_canceled': {'type': 'number', 'description': 'Quantity canceled.'}, 'qty_invoiced': {'type': 'number', 'description': 'Quantity invoiced.'}, 'qty_ordered': {'type': 'number', 'description': 'Quantity ordered.'}, 'qty_refunded': {'type': 'number', 'description': 'Quantity refunded.'}, 'qty_returned': {'type': 'number', 'description': 'Quantity returned.'}, 'qty_shipped': {'type': 'number', 'description': 'Quantity shipped.'}, 'quote_item_id': {'type': 'integer', 'description': 'Quote item ID.'}, 'row_invoiced': {'type': 'number', 'description': 'Row invoiced.'}, 'row_total': {'type': 'number', 'description': 'Row total.'}, 'row_total_incl_tax': {'type': 'number', 'description': 'Row total including tax.'}, 'row_weight': {'type': 'number', 'description': 'Row weight.'}, 'sku': {'type': 'string', 'description': 'SKU.'}, 'store_id': {'type': 'integer', 'description': 'Store ID.'}, 'tax_amount': {'type': 'number', 'description': 'Tax amount.'}, 'tax_before_discount': {'type': 'number', 'description': 'Tax before discount.'}, 'tax_canceled': {'type': 'number', 'description': 'Tax canceled.'}, 'tax_invoiced': {'type': 'number', 'description': 'Tax invoiced.'}, 'tax_percent': {'type': 'number', 'description': 'Tax percent.'}, 'tax_refunded': {'type': 'number', 'description': 'Tax refunded.'}, 'updated_at': {'type': 'string', 'description': 'Updated-at timestamp.'}, 'weee_tax_applied': {'type': 'string', 'description': 'WEEE tax applied.'}, 'weee_tax_applied_amount': {'type': 'number', 'description': 'WEEE tax applied amount.'}, 'weee_tax_applied_row_amount': {'type': 'number', 'description': 'WEEE tax applied row amount.'}, 'weee_tax_disposition': {'type': 'number', 'description': 'WEEE tax disposition.'}, 'weee_tax_row_disposition': {'type': 'number', 'description': 'WEEE tax row disposition.'}, 'weight': {'type': 'number', 'description': 'Weight.'}, 'parent_item': {'$ref': '#/components/schemas/sales-data-order-item-interface'}, 'product_option': {'$ref': '#/components/schemas/catalog-data-product-option-interface'}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-order-item-extension-interface'}}, 'required': ['sku']}, 'catalog-data-product-option-interface': {'type': 'object', 'description': 'Product option interface', 'properties': {'extension_attributes': {'$ref': '#/components/schemas/catalog-data-product-option-extension-interface'}}}, 'catalog-data-product-option-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Catalog\\Api\\Data\\ProductOptionInterface', 'properties': {'custom_options': {'type': 'array', 'items': {'$ref': '#/components/schemas/catalog-data-custom-option-interface'}}, 'bundle_options': {'type': 'array', 'items': {'$ref': '#/components/schemas/bundle-data-bundle-option-interface'}}, 'downloadable_option': {'$ref': '#/components/schemas/downloadable-data-downloadable-option-interface'}, 'giftcard_item_option': {'$ref': '#/components/schemas/gift-card-data-gift-card-option-interface'}, 'configurable_item_options': {'type': 'array', 'items': {'$ref': '#/components/schemas/configurable-product-data-configurable-item-option-value-interface'}}}}, 'sales-data-order-item-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\OrderItemInterface', 'properties': {'itemized_taxes': {'type': 'array', 'items': {'$ref': '#/components/schemas/tax-data-order-tax-item-interface'}}, 'gift_message': {'$ref': '#/components/schemas/gift-message-data-message-interface'}, 'gw_id': {'type': 'string'}, 'gw_base_price': {'type': 'string'}, 'gw_price': {'type': 'string'}, 'gw_base_tax_amount': {'type': 'string'}, 'gw_tax_amount': {'type': 'string'}, 'gw_base_price_invoiced': {'type': 'string'}, 'gw_price_invoiced': {'type': 'string'}, 'gw_base_tax_amount_invoiced': {'type': 'string'}, 'gw_tax_amount_invoiced': {'type': 'string'}, 'gw_base_price_refunded': {'type': 'string'}, 'gw_price_refunded': {'type': 'string'}, 'gw_base_tax_amount_refunded': {'type': 'string'}, 'gw_tax_amount_refunded': {'type': 'string'}}}, 'tax-data-order-tax-item-interface': {'type': 'object', 'description': '', 'properties': {'tax_item_id': {'type': 'integer', 'description': 'Tax item ID'}, 'tax_id': {'type': 'integer', 'description': 'Tax ID'}, 'item_id': {'type': 'integer', 'description': 'Order item ID'}, 'tax_code': {'type': 'string', 'description': 'Tax code'}, 'tax_percent': {'type': 'number', 'description': 'Tax percent'}, 'amount': {'type': 'number', 'description': 'Tax amount'}, 'base_amount': {'type': 'number', 'description': 'Tax amount in base currency'}, 'real_amount': {'type': 'number', 'description': 'Real tax amount'}, 'real_base_amount': {'type': 'number', 'description': 'Real tax amount in base currency'}, 'associated_item_id': {'type': 'integer', 'description': 'Associated order item ID'}, 'taxable_item_type': {'type': 'string', 'description': 'shipping, product, weee, quote_gw, etc...'}, 'extension_attributes': {'$ref': '#/components/schemas/tax-data-order-tax-item-extension-interface'}}, 'required': ['tax_percent', 'amount', 'base_amount', 'real_amount', 'real_base_amount']}, 'tax-data-order-tax-item-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Tax\\Api\\Data\\OrderTaxItemInterface'}, 'sales-data-order-address-interface': {'type': 'object', 'description': 'Order address interface. An order is a document that a web store issues to a customer. Magento generates a sales order that lists the product items, billing and shipping addresses, and shipping and payment methods. A corresponding external document, known as a purchase order, is emailed to the customer.', 'properties': {'address_type': {'type': 'string', 'description': 'Address type.'}, 'city': {'type': 'string', 'description': 'City.'}, 'company': {'type': 'string', 'description': 'Company.'}, 'country_id': {'type': 'string', 'description': 'Country ID.'}, 'customer_address_id': {'type': 'integer', 'description': 'Country address ID.'}, 'customer_id': {'type': 'integer', 'description': 'Customer ID.'}, 'email': {'type': 'string', 'description': 'Email address.'}, 'entity_id': {'type': 'integer', 'description': 'Order address ID.'}, 'fax': {'type': 'string', 'description': 'Fax number.'}, 'firstname': {'type': 'string', 'description': 'First name.'}, 'lastname': {'type': 'string', 'description': 'Last name.'}, 'middlename': {'type': 'string', 'description': 'Middle name.'}, 'parent_id': {'type': 'integer', 'description': 'Parent ID.'}, 'postcode': {'type': 'string', 'description': 'Postal code.'}, 'prefix': {'type': 'string', 'description': 'Prefix.'}, 'region': {'type': 'string', 'description': 'Region.'}, 'region_code': {'type': 'string', 'description': 'Region code.'}, 'region_id': {'type': 'integer', 'description': 'Region ID.'}, 'street': {'type': 'array', 'description': 'Array of any street values. Otherwise, null.', 'items': {'type': 'string'}}, 'suffix': {'type': 'string', 'description': 'Suffix.'}, 'telephone': {'type': 'string', 'description': 'Telephone number.'}, 'vat_id': {'type': 'string', 'description': 'VAT ID.'}, 'vat_is_valid': {'type': 'integer', 'description': 'VAT-is-valid flag value.'}, 'vat_request_date': {'type': 'string', 'description': 'VAT request date.'}, 'vat_request_id': {'type': 'string', 'description': 'VAT request ID.'}, 'vat_request_success': {'type': 'integer', 'description': 'VAT-request-success flag value.'}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-order-address-extension-interface'}}, 'required': ['address_type', 'city', 'country_id', 'firstname', 'lastname', 'postcode', 'telephone']}, 'sales-data-order-address-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\OrderAddressInterface'}, 'sales-data-order-payment-interface': {'type': 'object', 'description': 'Order payment interface. An order is a document that a web store issues to a customer. Magento generates a sales order that lists the product items, billing and shipping addresses, and shipping and payment methods. A corresponding external document, known as a purchase order, is emailed to the customer.', 'properties': {'account_status': {'type': 'string', 'description': 'Account status.'}, 'additional_data': {'type': 'string', 'description': 'Additional data.'}, 'additional_information': {'type': 'array', 'description': 'Array of additional information.', 'items': {'type': 'string'}}, 'address_status': {'type': 'string', 'description': 'Address status.'}, 'amount_authorized': {'type': 'number', 'description': 'Amount authorized.'}, 'amount_canceled': {'type': 'number', 'description': 'Amount canceled.'}, 'amount_ordered': {'type': 'number', 'description': 'Amount ordered.'}, 'amount_paid': {'type': 'number', 'description': 'Amount paid.'}, 'amount_refunded': {'type': 'number', 'description': 'Amount refunded.'}, 'anet_trans_method': {'type': 'string', 'description': 'Anet transaction method.'}, 'base_amount_authorized': {'type': 'number', 'description': 'Base amount authorized.'}, 'base_amount_canceled': {'type': 'number', 'description': 'Base amount canceled.'}, 'base_amount_ordered': {'type': 'number', 'description': 'Base amount ordered.'}, 'base_amount_paid': {'type': 'number', 'description': 'Base amount paid.'}, 'base_amount_paid_online': {'type': 'number', 'description': 'Base amount paid online.'}, 'base_amount_refunded': {'type': 'number', 'description': 'Base amount refunded.'}, 'base_amount_refunded_online': {'type': 'number', 'description': 'Base amount refunded online.'}, 'base_shipping_amount': {'type': 'number', 'description': 'Base shipping amount.'}, 'base_shipping_captured': {'type': 'number', 'description': 'Base shipping captured amount.'}, 'base_shipping_refunded': {'type': 'number', 'description': 'Base shipping refunded amount.'}, 'cc_approval': {'type': 'string', 'description': 'Credit card approval.'}, 'cc_avs_status': {'type': 'string', 'description': 'Credit card avs status.'}, 'cc_cid_status': {'type': 'string', 'description': 'Credit card CID status.'}, 'cc_debug_request_body': {'type': 'string', 'description': 'Credit card debug request body.'}, 'cc_debug_response_body': {'type': 'string', 'description': 'Credit card debug response body.'}, 'cc_debug_response_serialized': {'type': 'string', 'description': 'Credit card debug response serialized.'}, 'cc_exp_month': {'type': 'string', 'description': 'Credit card expiration month.'}, 'cc_exp_year': {'type': 'string', 'description': 'Credit card expiration year.'}, 'cc_last4': {'type': 'string', 'description': 'Last four digits of the credit card.'}, 'cc_number_enc': {'type': 'string', 'description': 'Encrypted credit card number.'}, 'cc_owner': {'type': 'string', 'description': 'Credit card number.'}, 'cc_secure_verify': {'type': 'string', 'description': 'Credit card secure verify.'}, 'cc_ss_issue': {'type': 'string', 'description': 'Credit card SS issue.'}, 'cc_ss_start_month': {'type': 'string', 'description': 'Credit card SS start month.'}, 'cc_ss_start_year': {'type': 'string', 'description': 'Credit card SS start year.'}, 'cc_status': {'type': 'string', 'description': 'Credit card status.'}, 'cc_status_description': {'type': 'string', 'description': 'Credit card status description.'}, 'cc_trans_id': {'type': 'string', 'description': 'Credit card transaction ID.'}, 'cc_type': {'type': 'string', 'description': 'Credit card type.'}, 'echeck_account_name': {'type': 'string', 'description': 'eCheck account name.'}, 'echeck_account_type': {'type': 'string', 'description': 'eCheck account type.'}, 'echeck_bank_name': {'type': 'string', 'description': 'eCheck bank name.'}, 'echeck_routing_number': {'type': 'string', 'description': 'eCheck routing number.'}, 'echeck_type': {'type': 'string', 'description': 'eCheck type.'}, 'entity_id': {'type': 'integer', 'description': 'Entity ID.'}, 'last_trans_id': {'type': 'string', 'description': 'Last transaction ID.'}, 'method': {'type': 'string', 'description': 'Method.'}, 'parent_id': {'type': 'integer', 'description': 'Parent ID.'}, 'po_number': {'type': 'string', 'description': 'PO number.'}, 'protection_eligibility': {'type': 'string', 'description': 'Protection eligibility.'}, 'quote_payment_id': {'type': 'integer', 'description': 'Quote payment ID.'}, 'shipping_amount': {'type': 'number', 'description': 'Shipping amount.'}, 'shipping_captured': {'type': 'number', 'description': 'Shipping captured.'}, 'shipping_refunded': {'type': 'number', 'description': 'Shipping refunded.'}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-order-payment-extension-interface'}}, 'required': ['account_status', 'additional_information', 'cc_last4', 'method']}, 'sales-data-order-payment-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\OrderPaymentInterface', 'properties': {'notification_message': {'type': 'string'}, 'vault_payment_token': {'$ref': '#/components/schemas/vault-data-payment-token-interface'}}}, 'vault-data-payment-token-interface': {'type': 'object', 'description': 'Gateway vault payment token interface.', 'properties': {'entity_id': {'type': 'integer', 'description': 'Entity ID.'}, 'customer_id': {'type': 'integer', 'description': 'Customer ID.'}, 'public_hash': {'type': 'string', 'description': 'Public hash'}, 'payment_method_code': {'type': 'string', 'description': 'Payment method code'}, 'type': {'type': 'string', 'description': 'Type'}, 'created_at': {'type': 'string', 'description': 'Token creation timestamp'}, 'expires_at': {'type': 'string', 'description': 'Token expiration timestamp'}, 'gateway_token': {'type': 'string', 'description': 'Gateway token ID'}, 'token_details': {'type': 'string', 'description': 'Token details'}, 'is_active': {'type': 'boolean', 'description': 'Is active.'}, 'is_visible': {'type': 'boolean', 'description': 'Is visible.'}, 'website_id': {'type': 'integer', 'description': 'website id.'}}, 'required': ['public_hash', 'payment_method_code', 'type', 'gateway_token', 'token_details', 'is_active', 'is_visible', 'website_id']}, 'sales-data-order-status-history-interface': {'type': 'object', 'description': 'Order status history interface. An order is a document that a web store issues to a customer. Magento generates a sales order that lists the product items, billing and shipping addresses, and shipping and payment methods. A corresponding external document, known as a purchase order, is emailed to the customer.', 'properties': {'comment': {'type': 'string', 'description': 'Comment.'}, 'created_at': {'type': 'string', 'description': 'Created-at timestamp.'}, 'entity_id': {'type': 'integer', 'description': 'Order status history ID.'}, 'entity_name': {'type': 'string', 'description': 'Entity name.'}, 'is_customer_notified': {'type': 'integer', 'description': 'Is-customer-notified flag value.'}, 'is_visible_on_front': {'type': 'integer', 'description': 'Is-visible-on-storefront flag value.'}, 'parent_id': {'type': 'integer', 'description': 'Parent ID.'}, 'status': {'type': 'string', 'description': 'Status.'}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-order-status-history-extension-interface'}}, 'required': ['comment', 'is_customer_notified', 'is_visible_on_front', 'parent_id']}, 'sales-data-order-status-history-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\OrderStatusHistoryInterface'}, 'sales-data-order-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\OrderInterface', 'properties': {'shipping_assignments': {'type': 'array', 'items': {'$ref': '#/components/schemas/sales-data-shipping-assignment-interface'}}, 'payment_additional_info': {'type': 'array', 'items': {'$ref': '#/components/schemas/payment-data-payment-additional-info-interface'}}, 'company_order_attributes': {'$ref': '#/components/schemas/company-data-company-order-interface'}, 'applied_taxes': {'type': 'array', 'items': {'$ref': '#/components/schemas/tax-data-order-tax-details-applied-tax-interface'}}, 'item_applied_taxes': {'type': 'array', 'items': {'$ref': '#/components/schemas/tax-data-order-tax-details-item-interface'}}, 'converting_from_quote': {'type': 'boolean'}, 'taxes': {'type': 'array', 'items': {'$ref': '#/components/schemas/tax-data-order-tax-interface'}}, 'additional_itemized_taxes': {'type': 'array', 'items': {'$ref': '#/components/schemas/tax-data-order-tax-item-interface'}}, 'base_customer_balance_amount': {'type': 'number'}, 'customer_balance_amount': {'type': 'number'}, 'base_customer_balance_invoiced': {'type': 'number'}, 'customer_balance_invoiced': {'type': 'number'}, 'base_customer_balance_refunded': {'type': 'number'}, 'customer_balance_refunded': {'type': 'number'}, 'base_customer_balance_total_refunded': {'type': 'number'}, 'customer_balance_total_refunded': {'type': 'number'}, 'gift_cards': {'type': 'array', 'items': {'$ref': '#/components/schemas/gift-card-account-data-gift-card-interface'}}, 'base_gift_cards_amount': {'type': 'number'}, 'gift_cards_amount': {'type': 'number'}, 'base_gift_cards_invoiced': {'type': 'number'}, 'gift_cards_invoiced': {'type': 'number'}, 'base_gift_cards_refunded': {'type': 'number'}, 'gift_cards_refunded': {'type': 'number'}, 'gift_message': {'$ref': '#/components/schemas/gift-message-data-message-interface'}, 'gw_id': {'type': 'string'}, 'gw_allow_gift_receipt': {'type': 'string'}, 'gw_add_card': {'type': 'string'}, 'gw_base_price': {'type': 'string'}, 'gw_price': {'type': 'string'}, 'gw_items_base_price': {'type': 'string'}, 'gw_items_price': {'type': 'string'}, 'gw_card_base_price': {'type': 'string'}, 'gw_card_price': {'type': 'string'}, 'gw_base_tax_amount': {'type': 'string'}, 'gw_tax_amount': {'type': 'string'}, 'gw_items_base_tax_amount': {'type': 'string'}, 'gw_items_tax_amount': {'type': 'string'}, 'gw_card_base_tax_amount': {'type': 'string'}, 'gw_card_tax_amount': {'type': 'string'}, 'gw_base_price_incl_tax': {'type': 'string'}, 'gw_price_incl_tax': {'type': 'string'}, 'gw_items_base_price_incl_tax': {'type': 'string'}, 'gw_items_price_incl_tax': {'type': 'string'}, 'gw_card_base_price_incl_tax': {'type': 'string'}, 'gw_card_price_incl_tax': {'type': 'string'}, 'gw_base_price_invoiced': {'type': 'string'}, 'gw_price_invoiced': {'type': 'string'}, 'gw_items_base_price_invoiced': {'type': 'string'}, 'gw_items_price_invoiced': {'type': 'string'}, 'gw_card_base_price_invoiced': {'type': 'string'}, 'gw_card_price_invoiced': {'type': 'string'}, 'gw_base_tax_amount_invoiced': {'type': 'string'}, 'gw_tax_amount_invoiced': {'type': 'string'}, 'gw_items_base_tax_invoiced': {'type': 'string'}, 'gw_items_tax_invoiced': {'type': 'string'}, 'gw_card_base_tax_invoiced': {'type': 'string'}, 'gw_card_tax_invoiced': {'type': 'string'}, 'gw_base_price_refunded': {'type': 'string'}, 'gw_price_refunded': {'type': 'string'}, 'gw_items_base_price_refunded': {'type': 'string'}, 'gw_items_price_refunded': {'type': 'string'}, 'gw_card_base_price_refunded': {'type': 'string'}, 'gw_card_price_refunded': {'type': 'string'}, 'gw_base_tax_amount_refunded': {'type': 'string'}, 'gw_tax_amount_refunded': {'type': 'string'}, 'gw_items_base_tax_refunded': {'type': 'string'}, 'gw_items_tax_refunded': {'type': 'string'}, 'gw_card_base_tax_refunded': {'type': 'string'}, 'gw_card_tax_refunded': {'type': 'string'}, 'pickup_location_code': {'type': 'string'}, 'notification_sent': {'type': 'integer'}, 'send_notification': {'type': 'integer'}, 'coupon_codes': {'type': 'array', 'items': {'type': 'string'}}, 'coupon_discounts': {'type': 'array', 'items': {'type': 'string'}}, 'reward_points_balance': {'type': 'integer'}, 'reward_currency_amount': {'type': 'number'}, 'base_reward_currency_amount': {'type': 'number'}}}, 'sales-data-shipping-assignment-interface': {'type': 'object', 'description': 'Interface ShippingAssignmentInterface', 'properties': {'shipping': {'$ref': '#/components/schemas/sales-data-shipping-interface'}, 'items': {'type': 'array', 'description': 'Order items of shipping assignment', 'items': {'$ref': '#/components/schemas/sales-data-order-item-interface'}}, 'stock_id': {'type': 'integer', 'description': 'Stock id'}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-shipping-assignment-extension-interface'}}, 'required': ['shipping', 'items']}, 'sales-data-shipping-interface': {'type': 'object', 'description': 'Interface ShippingInterface', 'properties': {'address': {'$ref': '#/components/schemas/sales-data-order-address-interface'}, 'method': {'type': 'string', 'description': 'Shipping method'}, 'total': {'$ref': '#/components/schemas/sales-data-total-interface'}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-shipping-extension-interface'}}}, 'sales-data-total-interface': {'type': 'object', 'description': 'Interface TotalInterface', 'properties': {'base_shipping_amount': {'type': 'number', 'description': 'Base shipping amount.'}, 'base_shipping_canceled': {'type': 'number', 'description': 'Base shipping canceled.'}, 'base_shipping_discount_amount': {'type': 'number', 'description': 'Base shipping discount amount.'}, 'base_shipping_discount_tax_compensation_amnt': {'type': 'number', 'description': 'Base shipping discount tax compensation amount.'}, 'base_shipping_incl_tax': {'type': 'number', 'description': 'Base shipping including tax.'}, 'base_shipping_invoiced': {'type': 'number', 'description': 'Base shipping invoiced.'}, 'base_shipping_refunded': {'type': 'number', 'description': 'Base shipping refunded.'}, 'base_shipping_tax_amount': {'type': 'number', 'description': 'Base shipping tax amount.'}, 'base_shipping_tax_refunded': {'type': 'number', 'description': 'Base shipping tax refunded.'}, 'shipping_amount': {'type': 'number', 'description': 'Shipping amount.'}, 'shipping_canceled': {'type': 'number', 'description': 'Shipping canceled amount.'}, 'shipping_discount_amount': {'type': 'number', 'description': 'Shipping discount amount.'}, 'shipping_discount_tax_compensation_amount': {'type': 'number', 'description': 'Shipping discount tax compensation amount.'}, 'shipping_incl_tax': {'type': 'number', 'description': 'Shipping including tax amount.'}, 'shipping_invoiced': {'type': 'number', 'description': 'Shipping invoiced amount.'}, 'shipping_refunded': {'type': 'number', 'description': 'Shipping refunded amount.'}, 'shipping_tax_amount': {'type': 'number', 'description': 'Shipping tax amount.'}, 'shipping_tax_refunded': {'type': 'number', 'description': 'Shipping tax refunded amount.'}, 'extension_attributes': {'$ref': '#/components/schemas/sales-data-total-extension-interface'}}}, 'sales-data-total-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\TotalInterface'}, 'sales-data-shipping-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\ShippingInterface'}, 'sales-data-shipping-assignment-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Sales\\Api\\Data\\ShippingAssignmentInterface'}, 'payment-data-payment-additional-info-interface': {'type': 'object', 'description': 'Payment additional info interface.', 'properties': {'key': {'type': 'string', 'description': 'Object key'}, 'value': {'type': 'string', 'description': 'Object value'}}, 'required': ['key', 'value']}, 'company-data-company-order-interface': {'type': 'object', 'description': 'Order company extension attributes interface. Adds new company attributes to orders.', 'properties': {'order_id': {'type': 'integer', 'description': 'Order ID.'}, 'company_id': {'type': 'integer', 'description': 'Company ID.'}, 'company_name': {'type': 'string', 'description': 'Company name.'}, 'extension_attributes': {'$ref': '#/components/schemas/company-data-company-order-extension-interface'}}}, 'company-data-company-order-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Company\\Api\\Data\\CompanyOrderInterface'}, 'tax-data-order-tax-details-applied-tax-interface': {'type': 'object', 'description': 'Interface OrderTaxDetailsAppliedTaxInterface', 'properties': {'code': {'type': 'string', 'description': 'Code'}, 'title': {'type': 'string', 'description': 'Title'}, 'percent': {'type': 'number', 'description': 'Tax Percent'}, 'amount': {'type': 'number', 'description': 'Tax amount'}, 'base_amount': {'type': 'number', 'description': 'Tax amount in base currency'}, 'extension_attributes': {'$ref': '#/components/schemas/tax-data-order-tax-details-applied-tax-extension-interface'}}, 'required': ['amount', 'base_amount']}, 'tax-data-order-tax-details-applied-tax-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Tax\\Api\\Data\\OrderTaxDetailsAppliedTaxInterface', 'properties': {'rates': {'type': 'array', 'items': {'$ref': '#/components/schemas/tax-data-applied-tax-rate-interface'}}}}, 'tax-data-applied-tax-rate-interface': {'type': 'object', 'description': 'Applied tax rate interface.', 'properties': {'code': {'type': 'string', 'description': 'Code'}, 'title': {'type': 'string', 'description': 'Title'}, 'percent': {'type': 'number', 'description': 'Tax Percent'}, 'extension_attributes': {'$ref': '#/components/schemas/tax-data-applied-tax-rate-extension-interface'}}}, 'tax-data-applied-tax-rate-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Tax\\Api\\Data\\AppliedTaxRateInterface'}, 'tax-data-order-tax-details-item-interface': {'type': 'object', 'description': 'Interface OrderTaxDetailsItemInterface', 'properties': {'type': {'type': 'string', 'description': 'Type (shipping, product, weee, gift wrapping, etc)'}, 'item_id': {'type': 'integer', 'description': 'Item id if this item is a product'}, 'associated_item_id': {'type': 'integer', 'description': 'Associated item id if this item is associated with another item, null otherwise'}, 'applied_taxes': {'type': 'array', 'description': 'Applied taxes', 'items': {'$ref': '#/components/schemas/tax-data-order-tax-details-applied-tax-interface'}}, 'extension_attributes': {'$ref': '#/components/schemas/tax-data-order-tax-details-item-extension-interface'}}}, 'tax-data-order-tax-details-item-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Tax\\Api\\Data\\OrderTaxDetailsItemInterface'}, 'tax-data-order-tax-interface': {'type': 'object', 'description': '', 'properties': {'tax_id': {'type': 'integer', 'description': 'Tax ID'}, 'order_id': {'type': 'integer', 'description': 'Order ID'}, 'code': {'type': 'string', 'description': 'Code'}, 'title': {'type': 'string', 'description': 'Title'}, 'percent': {'type': 'number', 'description': 'Percent'}, 'amount': {'type': 'number', 'description': 'Amount'}, 'base_amount': {'type': 'number', 'description': 'Tax amount in base currency'}, 'base_real_amount': {'type': 'number', 'description': 'Real tax amount in base currency'}, 'priority': {'type': 'integer', 'description': 'Priority'}, 'position': {'type': 'integer', 'description': 'Position'}, 'process': {'type': 'integer', 'description': 'Process'}, 'extension_attributes': {'$ref': '#/components/schemas/tax-data-order-tax-extension-interface'}}, 'required': ['percent', 'amount', 'base_amount', 'base_real_amount', 'priority', 'position', 'process']}, 'tax-data-order-tax-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Tax\\Api\\Data\\OrderTaxInterface'}, 'gift-card-account-data-gift-card-interface': {'type': 'object', 'description': 'Gift Card data', 'properties': {'id': {'type': 'integer', 'description': 'Id'}, 'code': {'type': 'string', 'description': 'Code'}, 'amount': {'type': 'number', 'description': 'Amount'}, 'base_amount': {'type': 'number', 'description': 'Base Amount'}}, 'required': ['id', 'code', 'amount', 'base_amount']}, 'framework-search-filter-group': {'type': 'object', 'description': 'Groups two or more filters together using a logical OR', 'properties': {'filters': {'type': 'array', 'description': 'A list of filters in this group', 'items': {'$ref': '#/components/schemas/framework-filter'}}}}, 'framework-filter': {'type': 'object', 'description': 'Filter which can be used by any methods from service layer.', 'properties': {'field': {'type': 'string', 'description': 'Field'}, 'value': {'type': 'string', 'description': 'Value'}, 'condition_type': {'type': 'string', 'description': 'Condition type'}}, 'required': ['field', 'value']}, 'framework-sort-order': {'type': 'object', 'description': 'Data object for sort order.', 'properties': {'field': {'type': 'string', 'description': 'Sorting field.'}, 'direction': {'type': 'string', 'description': 'Sorting direction.'}}, 'required': ['field', 'direction']}, 'catalog-data-custom-option-interface': {'type': 'object', 'description': 'Interface CustomOptionInterface', 'properties': {'option_id': {'type': 'string', 'description': 'Option id'}, 'option_value': {'type': 'string', 'description': 'Option value'}, 'extension_attributes': {'$ref': '#/components/schemas/catalog-data-custom-option-extension-interface'}}, 'required': ['option_id', 'option_value']}, 'catalog-data-custom-option-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Catalog\\Api\\Data\\CustomOptionInterface', 'properties': {'file_info': {'$ref': '#/components/schemas/framework-data-image-content-interface'}}}, 'bundle-data-bundle-option-interface': {'type': 'object', 'description': 'Interface BundleOptionInterface', 'properties': {'option_id': {'type': 'integer', 'description': 'Bundle option id.'}, 'option_qty': {'type': 'integer', 'description': 'Bundle option quantity.'}, 'option_selections': {'type': 'array', 'description': 'Bundle option selection ids.', 'items': {'type': 'integer'}}, 'extension_attributes': {'$ref': '#/components/schemas/bundle-data-bundle-option-extension-interface'}}, 'required': ['option_id', 'option_qty', 'option_selections']}, 'bundle-data-bundle-option-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\Bundle\\Api\\Data\\BundleOptionInterface'}, 'downloadable-data-downloadable-option-interface': {'type': 'object', 'description': 'Downloadable Option', 'properties': {'downloadable_links': {'type': 'array', 'description': 'The list of downloadable links', 'items': {'type': 'integer'}}}, 'required': ['downloadable_links']}, 'gift-card-data-gift-card-option-interface': {'type': 'object', 'description': 'Interface GiftCardOptionInterface', 'properties': {'giftcard_amount': {'type': 'string', 'description': 'Gift card amount.'}, 'custom_giftcard_amount': {'type': 'number', 'description': 'Gift card open amount value.'}, 'giftcard_sender_name': {'type': 'string', 'description': 'Gift card sender name.'}, 'giftcard_recipient_name': {'type': 'string', 'description': 'Gift card recipient name.'}, 'giftcard_sender_email': {'type': 'string', 'description': 'Gift card sender email.'}, 'giftcard_recipient_email': {'type': 'string', 'description': 'Gift card recipient email.'}, 'giftcard_message': {'type': 'string', 'description': 'Giftcard message.'}, 'extension_attributes': {'$ref': '#/components/schemas/gift-card-data-gift-card-option-extension-interface'}}, 'required': ['giftcard_amount', 'giftcard_sender_name', 'giftcard_recipient_name', 'giftcard_sender_email', 'giftcard_recipient_email']}, 'gift-card-data-gift-card-option-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\GiftCard\\Api\\Data\\GiftCardOptionInterface', 'properties': {'giftcard_created_codes': {'type': 'array', 'items': {'type': 'string'}}}}, 'configurable-product-data-configurable-item-option-value-interface': {'type': 'object', 'description': 'Interface ConfigurableItemOptionValueInterface', 'properties': {'option_id': {'type': 'string', 'description': 'Option SKU'}, 'option_value': {'type': 'integer', 'description': 'Item id'}, 'extension_attributes': {'$ref': '#/components/schemas/configurable-product-data-configurable-item-option-value-extension-interface'}}, 'required': ['option_id']}, 'configurable-product-data-configurable-item-option-value-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\ConfigurableProduct\\Api\\Data\\ConfigurableItemOptionValueInterface'}, 'gift-message-data-message-interface': {'type': 'object', 'description': 'Interface MessageInterface', 'properties': {'gift_message_id': {'type': 'integer', 'description': 'Gift message ID. Otherwise, null.'}, 'customer_id': {'type': 'integer', 'description': 'Customer ID. Otherwise, null.'}, 'sender': {'type': 'string', 'description': 'Sender name.'}, 'recipient': {'type': 'string', 'description': 'Recipient name.'}, 'message': {'type': 'string', 'description': 'Message text.'}, 'extension_attributes': {'$ref': '#/components/schemas/gift-message-data-message-extension-interface'}}, 'required': ['sender', 'recipient', 'message']}, 'gift-message-data-message-extension-interface': {'type': 'object', 'description': 'ExtensionInterface class for @see \\Magento\\GiftMessage\\Api\\Data\\MessageInterface', 'properties': {'entity_id': {'type': 'string'}, 'entity_type': {'type': 'string'}, 'wrapping_id': {'type': 'integer'}, 'wrapping_allow_gift_receipt': {'type': 'boolean'}, 'wrapping_add_printed_card': {'type': 'boolean'}}}, 'framework-data-image-content-interface': {'type': 'object', 'description': 'Image Content data interface', 'properties': {'base64_encoded_data': {'type': 'string', 'description': 'Media data (base64 encoded content)'}, 'type': {'type': 'string', 'description': 'MIME type'}, 'name': {'type': 'string', 'description': 'Image name'}}, 'required': ['base64_encoded_data', 'type', 'name']}}}

@@ -1,0 +1,152 @@
+================================================================================
+BEYOND BROWSING / API-BASED AGENT — EVALUATION NOTES
+================================================================================
+
+--------------------------------------------------------------------------------
+1. CONFIGURING THE LLM (config.toml)
+--------------------------------------------------------------------------------
+The project uses litellm under the hood, so Claude models are supported.
+Edit API-Based-Agent/config.toml:
+
+    [llm]
+    model="anthropic/claude-sonnet-4-6"
+    api_key="sk-ant-..."
+    base_url=""
+    embedding_model="openai"
+
+Model name format follows litellm: anthropic/claude-sonnet-4-6, anthropic/claude-opus-4-8, etc.
+Leave base_url empty when using Anthropic directly (remove the CMU litellm proxy URL).
+Your api_key should be your Anthropic key (starts with sk-ant-).
+
+Available Claude models:
+  - claude-opus-4-8   (most capable)
+  - claude-sonnet-4-6 (balanced)
+  - claude-haiku-4-5  (fastest)
+
+--------------------------------------------------------------------------------
+2. THE WEBARENA EVALUATION DATASET
+--------------------------------------------------------------------------------
+Full dataset: 812 tasks across 6 websites (test.raw.json)
+
+  Site            Tasks   First task_id
+  --------------- ------  -------------
+  shopping_admin  182     0
+  shopping        192     21
+  reddit          129     27
+  gitlab          204     44
+  map             128     7
+  wikipedia        23     (part of cross-site tasks)
+
+Cross-site task groups:
+  gitlab + reddit         18 tasks  (first_id: 552)
+  map + wikipedia         17 tasks  (first_id: 97)
+  gitlab + wikipedia       6 tasks  (first_id: 556)
+  reddit + shopping        5 tasks  (first_id: 671)
+  map + shopping_admin     2 tasks  (first_id: 759)
+
+HOW TASK SELECTION WORKS:
+  get_tests(start_task_id) looks up which site that task belongs to, then
+  returns ALL tasks for that site. So --start_task_id just picks the site,
+  not a specific task. Tasks are then sliced by --eval-n-limit.
+
+--------------------------------------------------------------------------------
+3. RUNNING THE EVALUATION (run_infer.sh)
+--------------------------------------------------------------------------------
+Script location: evaluation/webarena/scripts/run_infer.sh
+Run from: API-Based-Agent/ directory
+
+What it does:
+  - Runs the CodeActAgent on WebArena tasks using your configured LLM
+  - Saves results to: evaluation/evaluation_outputs/outputs/webarena/...
+      logs/instance_<task_id>.log  — per-task agent trajectory
+      metadata.json                — run config
+      output_<model>.jsonl         — one JSON line per task with results
+
+Key flags:
+  --start_task_id     Which task to start from (determines which site runs)
+  --eval-n-limit      Max number of tasks to run (remove for all tasks in site)
+  --max-iterations    Max turns the agent gets per task (default: 18)
+  --eval-num-workers  Parallel workers (keep at 1 unless you have resources)
+
+The model is read from config.toml via --llm-config llm.
+
+TO SKIP MAP AND WIKIPEDIA — run the script once per site you want:
+
+    for START_ID in 0 21 27 44 552 671; do
+      poetry run python evaluation/webarena/run_infer.py \
+        --agent-cls CodeActAgent \
+        --llm-config llm \
+        --start_task_id $START_ID \
+        --max-iterations 18 \
+        --eval-num-workers 1 \
+        --eval-note <your_note>
+    done
+
+--------------------------------------------------------------------------------
+4. HOW THE CODEACT AGENT WORKS
+--------------------------------------------------------------------------------
+The agent is in: agenthub/codeact_agent/codeact_agent.py
+The abstract base class is in: opendevin/controller/agent.py (interface only)
+
+This is a CodeAct agent, NOT pure ReAct:
+  - ReAct:    explicit Thought → Action → Observation cycle (labeled steps)
+  - CodeAct:  LLM outputs code directly; reasoning is implicit in free text
+              before the code block. Framework only parses the code tags.
+
+The step() method is called ONCE per turn by the OpenDevin controller.
+Each call rebuilds the full message history from state.history and calls
+the LLM to get the next action. The controller handles the outer loop.
+
+Action types the agent can take:
+  <execute_bash>    — run a bash command
+  <execute_ipython> — run Python in an IPython kernel
+  <execute_browse>  — interact with the browser
+
+IMPORTANT: The first 3 turns per task are hardcoded login sequences
+(navigate to site, fill credentials, click login). The LLM is NOT called
+for these turns. Actual agent reasoning starts at turn 4.
+
+--------------------------------------------------------------------------------
+5. HARDCODED URLs — NOW MOVED TO .env
+--------------------------------------------------------------------------------
+All server URLs were previously hardcoded in the source files. They have been
+replaced with environment variables loaded from API-Based-Agent/.env
+
+Fill in your actual server addresses in .env:
+
+    GITLAB=http://your-gitlab-server:8023
+    SHOPPING=http://your-shopping-server:7770
+    SHOPPING_ADMIN=http://your-shopping-admin-server:7780/admin
+    SHOPPING_ADMIN_REST=http://your-shopping-admin-server:7780
+    REDDIT=http://your-reddit-server:9999
+    MAP=http://your-map-server:3000
+    WIKIPEDIA=http://your-wikipedia-server:8888/...
+    HOMEPAGE=http://your-homepage-server:4399
+    GITLAB_TOKEN=your-gitlab-token-here
+
+The .env file is sourced automatically by run_infer.sh.
+Files that were updated to use env vars:
+  - agenthub/codeact_agent/codeact_agent.py
+  - evaluation/webarena/utils.py
+  - evaluation/webarena/prompt.py
+  - evaluation/webarena/workspace_utils.py
+
+--------------------------------------------------------------------------------
+6. QUICK REFERENCE
+--------------------------------------------------------------------------------
+Configure LLM:
+    Edit API-Based-Agent/config.toml
+
+Fill in server URLs:
+    Edit API-Based-Agent/.env
+
+Run a single test task (smoke test):
+    bash evaluation/webarena/scripts/run_infer.sh
+
+Run all tasks for a specific site (e.g. gitlab, start_id=44):
+    Edit run_infer.sh: set --start_task_id 44 and remove --eval-n-limit
+
+Run all tasks skipping map/wikipedia:
+    Loop over start_ids: 0, 21, 27, 44, 552, 671
+
+================================================================================
