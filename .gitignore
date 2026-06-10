@@ -1,3 +1,6 @@
 .env
 logs/
 config.toml
+agenthub/codeact_agent/__pycache__/
+evaluation/webarena/__pycache__/
+evaluation/webarena/worker_pool/__pycache__/

@@ -58,6 +58,17 @@ MAP_URL = os.environ.get('MAP', '')
 REDDIT_URL = os.environ.get('REDDIT', '')
 
 
+def _get_site_urls():
+    """Read site URLs from env at call time so worker-specific URLs are picked up."""
+    return {
+        'GITLAB': os.environ.get('GITLAB', GITLAB_URL),
+        'SHOPPING': os.environ.get('SHOPPING', SHOPPING_URL),
+        'SHOPPING_ADMIN': os.environ.get('SHOPPING_ADMIN', SHOPPING_ADMIN_URL),
+        'MAP': os.environ.get('MAP', MAP_URL),
+        'REDDIT': os.environ.get('REDDIT', REDDIT_URL),
+    }
+
+
 def get_error_prefix(last_browser_action: str) -> str:
     return f'IMPORTANT! Last action is incorrect:\n{last_browser_action}\nThink again with the current observation of the page.\n'
 
@@ -257,6 +268,12 @@ class CodeActAgent(Agent):
         - AgentFinishAction() - end the interaction
         """
         history_str = f'{state.history}'
+        urls = _get_site_urls()
+        _GITLAB_URL = urls['GITLAB']
+        _SHOPPING_URL = urls['SHOPPING']
+        _SHOPPING_ADMIN_URL = urls['SHOPPING_ADMIN']
+        _MAP_URL = urls['MAP']
+        _REDDIT_URL = urls['REDDIT']
         SYSTEM_PROMPT = (
             SYSTEM_PREFIX
             + API_PROMPT
@@ -327,6 +344,8 @@ class CodeActAgent(Agent):
         ):
             return MessageAction(last_action.browsergym_send_msg_to_user)
 
+        response = None
+
         if EVAL_MODE and len(state.history) == 1:
             # for webarena and miniwob++ eval, we need to retrieve the initial observation already in browser env
             # initialize and retrieve the first observation by issuing an noop OP
@@ -334,39 +353,39 @@ class CodeActAgent(Agent):
             # This message will not be included in `messages`
 
             ### SHOPPING
-            if SHOPPING_URL in history_str:
+            if _SHOPPING_URL in history_str:
                 logger.info('logging in to shopping website')
-                action = f'goto("{SHOPPING_URL}/customer/account/login/")\n'
+                action = f'goto("{_SHOPPING_URL}/customer/account/login/")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### MAP
-            if MAP_URL in history_str:
+            if _MAP_URL in history_str:
                 logger.info('logging in to map website')
-                action = f'goto("{MAP_URL}")\n'
+                action = f'goto("{_MAP_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### SHOPPING ADMIN
-            if SHOPPING_ADMIN_URL in history_str:
+            if _SHOPPING_ADMIN_URL in history_str:
                 logger.info('logging in to shopping admin website')
-                action = f'goto("{SHOPPING_ADMIN_URL}")\n'
+                action = f'goto("{_SHOPPING_ADMIN_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### REDDIT
-            if REDDIT_URL in history_str:
+            if _REDDIT_URL in history_str:
                 logger.info('logging in to reddit website')
-                action = f'goto("{REDDIT_URL}/login")\n'
+                action = f'goto("{_REDDIT_URL}/login")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB
-            if GITLAB_URL in history_str:
+            if _GITLAB_URL in history_str:
                 logger.info('logging in to gitlab')
-                action = f'goto("{GITLAB_URL}/users/sign_in")\n'
+                action = f'goto("{_GITLAB_URL}/users/sign_in")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB and REDDIT
-            if GITLAB_URL in history_str and REDDIT_URL in history_str:
+            if _GITLAB_URL in history_str and _REDDIT_URL in history_str:
                 logger.info('logging in to reddit')
-                action = f'goto("{REDDIT_URL}/login")\n'
+                action = f'goto("{_REDDIT_URL}/login")\n'
                 action += 'fill("62", "MarvelsGrantMan136")\n'
                 action += 'fill("65", "test1234")\n'
                 action += 'click("76")\n'
@@ -374,49 +393,49 @@ class CodeActAgent(Agent):
 
         elif EVAL_MODE and len(state.history) <= 2:
             ### SHOPPING
-            if SHOPPING_URL in history_str:
+            if _SHOPPING_URL in history_str:
                 action = 'fill("1375", "emma.lopez@gmail.com")\n'
                 action += 'fill("1380", "Password.123")\n'
                 action += 'click("1387")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### MAP
-            if MAP_URL in history_str:
-                MAP_START_URL = os.environ.get('MAP_START_URL', MAP_URL)
+            if _MAP_URL in history_str:
+                MAP_START_URL = os.environ.get('MAP_START_URL', _MAP_URL)
                 action = f'goto("{MAP_START_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### SHOPPING ADMIN
-            if SHOPPING_ADMIN_URL in history_str:
+            if _SHOPPING_ADMIN_URL in history_str:
                 action = 'fill("133", "admin")\n'
                 action += 'fill("138", "admin1234")\n'
                 action += 'click("141")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### REDDIT
-            if REDDIT_URL in history_str:
+            if _REDDIT_URL in history_str:
                 action = 'fill("62", "MarvelsGrantMan136")\n'
                 action += 'fill("65", "test1234")\n'
                 action += 'click("76")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB
-            if GITLAB_URL in history_str:
+            if _GITLAB_URL in history_str:
                 action = 'fill("66", "byteblaze")\n'
                 action += 'fill("70", "hello1234")\n'
                 action += 'click("83")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB and REDDIT
-            if GITLAB_URL in history_str and REDDIT_URL in history_str:
+            if _GITLAB_URL in history_str and _REDDIT_URL in history_str:
                 logger.info('logging in to gitlab')
-                action = f'goto("{GITLAB_URL}/users/sign_in")\n'
+                action = f'goto("{_GITLAB_URL}/users/sign_in")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
         elif EVAL_MODE and len(state.history) <= 3:
             ### SHOPPING
-            if SHOPPING_URL in history_str:
-                SHOPPING_START_URL = os.environ.get('SHOPPING_START_URL', SHOPPING_URL)
+            if _SHOPPING_URL in history_str:
+                SHOPPING_START_URL = os.environ.get('SHOPPING_START_URL', _SHOPPING_URL)
                 logger.info(f'opening shopping {SHOPPING_START_URL}')
                 task_start_urls = [
                     task_start_url.strip()
@@ -428,28 +447,28 @@ class CodeActAgent(Agent):
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### SHOPPING ADMIN
-            if SHOPPING_ADMIN_URL in history_str:
+            if _SHOPPING_ADMIN_URL in history_str:
                 SHOPPING_ADMIN_START_URL = os.environ.get(
-                    'SHOPPING_ADMIN_START_URL', SHOPPING_ADMIN_URL
+                    'SHOPPING_ADMIN_START_URL', _SHOPPING_ADMIN_URL
                 )
                 logger.info(f'opening shopping admin {SHOPPING_ADMIN_START_URL}')
                 action = f'goto("{SHOPPING_ADMIN_START_URL}")'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### MAP
-            if MAP_URL in history_str:
-                MAP_START_URL = os.environ.get('MAP_START_URL', MAP_URL)
+            if _MAP_URL in history_str:
+                MAP_START_URL = os.environ.get('MAP_START_URL', _MAP_URL)
                 action = f'goto("{MAP_START_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### REDDIT
-            if REDDIT_URL in history_str:
-                REDDIT_START_URL = os.environ.get('REDDIT_START_URL', REDDIT_URL)
+            if _REDDIT_URL in history_str:
+                REDDIT_START_URL = os.environ.get('REDDIT_START_URL', _REDDIT_URL)
                 action = f'goto("{REDDIT_START_URL}")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
-            if SHOPPING_URL in history_str and REDDIT_URL in history_str:
-                SHOPPING_START_URL = os.environ.get('SHOPPING_START_URL', SHOPPING_URL)
+            if _SHOPPING_URL in history_str and _REDDIT_URL in history_str:
+                SHOPPING_START_URL = os.environ.get('SHOPPING_START_URL', _SHOPPING_URL)
                 logger.info(f'opening shopping {SHOPPING_START_URL}')
                 task_start_urls = [
                     task_start_url.strip()
@@ -461,21 +480,21 @@ class CodeActAgent(Agent):
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB
-            if GITLAB_URL in history_str:
-                GITLAB_START_URL = os.environ.get('GITLAB_START_URL', GITLAB_URL)
+            if _GITLAB_URL in history_str:
+                GITLAB_START_URL = os.environ.get('GITLAB_START_URL', _GITLAB_URL)
                 logger.info(f'opening gitlab {GITLAB_START_URL}')
                 action = f'goto("{GITLAB_START_URL}")'
                 response = f'<execute_browse> {action} </execute_browse>'
 
             ### GITLAB and REDDIT
-            if GITLAB_URL in history_str and REDDIT_URL in history_str:
+            if _GITLAB_URL in history_str and _REDDIT_URL in history_str:
                 logger.info('logging in to gitlab')
                 action = 'fill("66", "byteblaze")\n'
                 action += 'fill("70", "hello1234")\n'
                 action += 'click("83")\n'
                 response = f'<execute_browse> {action} </execute_browse>'
 
-        else:
+        if response is None:
             messages[-1]['content'] = messages[-1]['content'] + '\n' + browse_prompt
             latest_user_messages = [m for m in messages if m['role'] == 'user']
             if len(latest_user_messages) >= 1:

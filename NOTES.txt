@@ -149,4 +149,50 @@ Run all tasks for a specific site (e.g. gitlab, start_id=44):
 Run all tasks skipping map/wikipedia:
     Loop over start_ids: 0, 21, 27, 44, 552, 671
 
+Run all tasks in parallel with multi-docker:
+    export REMOTE_HOST=annabella@red5k.cs.berkeley.edu
+    poetry run python evaluation/webarena/run_infer.py \
+      --agent-cls CodeActAgent --llm-config llm \
+      --start_task_id 44 --max-iterations 18 --multi-docker
+
+================================================================================
+--------------------------------------------------------------------------------
+7. MULTI-DOCKER PARALLEL EVALUATION (--multi-docker)
+--------------------------------------------------------------------------------
+Tasks can now run in parallel across multiple isolated Docker workers managed
+by the SSH orchestrator at /scr2/webagent-verified/webarena_orchestrator/.
+
+NEW FILES:
+  evaluation/webarena/worker_pool/__init__.py  — package init
+  evaluation/webarena/worker_pool/workers.py   — SSH worker pool client
+
+HOW IT WORKS:
+  Each task acquires its own docker worker over SSH (separate GitLab/Shopping/
+  Reddit instance on a different port). The agent runs in a ProcessPoolExecutor
+  subprocess so GITLAB/SHOPPING/REDDIT env vars can be set per-task without
+  interfering with other concurrent tasks.
+
+REQUIREMENTS:
+  - REMOTE_HOST env var must point to the orchestrator server
+      export REMOTE_HOST=annabella@red5k.cs.berkeley.edu
+  - SSH key-based auth to that host (no password prompt)
+  - The orchestrator script must be accessible at:
+      /scr2/webagent-verified/webarena_orchestrator/orchestrator.py
+
+USAGE:
+  export REMOTE_HOST=annabella@red5k.cs.berkeley.edu
+  poetry run python evaluation/webarena/run_infer.py \
+    --agent-cls CodeActAgent \
+    --llm-config llm \
+    --start_task_id 44 \
+    --max-iterations 18 \
+    --multi-docker
+
+NOTES:
+  - Parallelism is capped at num_workers() (how many docker workers the
+    orchestrator reports as available).
+  - map and wikipedia tasks don't use a docker worker — they still work but
+    will use whatever MAP/WIKIPEDIA env vars are set in .env.
+  - Without --multi-docker the original sequential path is unchanged.
+
 ================================================================================

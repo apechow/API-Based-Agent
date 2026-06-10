@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import json
 import logging
 import multiprocessing as mp
@@ -155,6 +156,146 @@ def process_instance(task, agent_class, metadata, reset_logger: bool = True):
     return output
 
 
+def _replace_urls_in_obj(obj, old_url, new_url):
+    """Recursively replace old_url with new_url in strings inside dicts/lists."""
+    if isinstance(obj, str):
+        return obj.replace(old_url, new_url)
+    if isinstance(obj, dict):
+        return {k: _replace_urls_in_obj(v, old_url, new_url) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_replace_urls_in_obj(item, old_url, new_url) for item in obj]
+    return obj
+
+
+def process_instance_with_urls(
+    task, agent_class, metadata, server_urls, orig_urls, reset_logger=True
+):
+    """
+    Wrapper around process_instance that overrides server URLs in os.environ
+    and rewrites matching URLs inside the task dict.
+
+    server_urls: {ENV_VAR: worker_url}  — what to set in os.environ
+    orig_urls:   {ENV_VAR: old_url}     — the URLs currently embedded in the task dict
+                                          (built in the parent process from .env)
+
+    The task dict is rewritten so every occurrence of old_url is replaced with
+    the worker URL before process_instance sees it. This is necessary because
+    prompt.py splits task['start_url'] on site_base to extract the path, so
+    both must use the same host:port.
+    """
+    import copy
+
+    task = copy.deepcopy(task)
+    for env_key, new_url in server_urls.items():
+        old_url = orig_urls.get(env_key, '')
+        if old_url and new_url and old_url != new_url:
+            task = _replace_urls_in_obj(task, old_url, new_url)
+
+    saved = {k: os.environ.get(k) for k in server_urls}
+    try:
+        os.environ.update(server_urls)
+        return process_instance(task, agent_class, metadata, reset_logger=reset_logger)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+async def run_multi_docker(tests, agent_class, metadata, task_timeout: int = 1800):
+    """
+    Run tasks in parallel, one per available docker worker.
+
+    Each task gets its own docker worker acquired over SSH. The agent runs
+    inside a subprocess (ProcessPoolExecutor) so os.environ mutations for
+    GITLAB/SHOPPING/REDDIT URLs are isolated per task.
+
+    task_timeout: seconds before a hung task is cancelled and its worker released
+                  (default 30 min — set lower for faster failure detection).
+    """
+    from worker_pool.workers import (
+        acquire_worker,
+        num_workers,
+        release_worker,
+        server_urls_for_worker,
+    )
+
+    n = num_workers()
+    logger.info(f'Multi-docker mode: {n} workers available, {len(tests)} tasks queued')
+
+    sem = asyncio.Semaphore(n)
+    acquire_lock = asyncio.Lock()
+    loop = asyncio.get_running_loop()
+    executor = concurrent.futures.ProcessPoolExecutor(max_workers=n)
+
+    async def run_one(task):
+        async with sem:
+            async with acquire_lock:
+                worker = await asyncio.to_thread(acquire_worker, str(task['task_id']))
+
+            worker_id = worker['worker_id']
+            logger.info(f"Task {task['task_id']} → worker {worker_id}")
+            task_failed = False
+            try:
+                urls = server_urls_for_worker(worker)
+                # Capture current (parent-process) values so the subprocess can
+                # rewrite task URLs that were built against the local .env URLs.
+                orig_urls = {k: os.environ.get(k, '') for k in urls}
+                fut = loop.run_in_executor(
+                    executor,
+                    process_instance_with_urls,
+                    task,
+                    agent_class,
+                    metadata,
+                    urls,
+                    orig_urls,
+                    True,
+                )
+                output = await asyncio.wait_for(fut, timeout=task_timeout)
+            except asyncio.TimeoutError:
+                task_failed = True
+                logger.error(
+                    f"Task {task['task_id']} timed out after {task_timeout}s on worker {worker_id}"
+                )
+                output = {
+                    'task_id': task['task_id'],
+                    'error': f'timed out after {task_timeout}s',
+                    'correct': False,
+                    'raw': '',
+                    'worker_id': worker_id,
+                    'end_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+                }
+            except BaseException as exc:
+                task_failed = True
+                import traceback as _tb
+
+                logger.error(
+                    f"Task {task['task_id']} failed on worker {worker_id}: {exc}\n"
+                    + _tb.format_exc()
+                )
+                output = {
+                    'task_id': task['task_id'],
+                    'error': str(exc),
+                    'correct': False,
+                    'raw': '',
+                    'worker_id': worker_id,
+                    'end_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+                }
+            finally:
+                release_worker(worker_id, read_only=task_failed)
+                logger.info(
+                    f"Worker {worker_id} released (task {task['task_id']}, read_only={task_failed})"
+                )
+
+            return output
+
+    futures = [asyncio.ensure_future(run_one(t)) for t in tests]
+    results = await asyncio.gather(*futures, return_exceptions=True)
+    executor.shutdown(wait=True)
+    return [r for r in results if isinstance(r, dict)]
+
+
 if __name__ == '__main__':
     parser = get_parser()
     parser.add_argument(
@@ -162,6 +303,16 @@ if __name__ == '__main__':
         type=int,
         help='which task_id to start from',
         default=132,
+    )
+    parser.add_argument(
+        '--multi-docker',
+        action='store_true',
+        default=False,
+        help=(
+            'Run tasks in parallel against the multi-docker worker pool via SSH. '
+            'Requires REMOTE_HOST env var (e.g. user@host). '
+            'Each task acquires an isolated docker worker so evaluations do not interfere.'
+        ),
     )
     args, _ = parser.parse_known_args()
     if args.directory:
@@ -302,6 +453,24 @@ if __name__ == '__main__':
     )
 
     # =============================================
+    # Multi-docker parallel path
+    if args.multi_docker:
+        logger.info(
+            'Multi-docker mode enabled — running tasks in parallel via SSH worker pool'
+        )
+        outputs = asyncio.run(run_multi_docker(tests, agent_class, metadata))
+        for output in outputs:
+            logger.info(
+                f'Finished evaluation for instance {output["task_id"]}: '
+                f'correctness - {output.get("correct")}; answer - {output.get("raw", "")}'
+            )
+            output_fp.write(json.dumps(output) + '\n')
+            output_fp.flush()
+        output_fp.close()
+        sys.exit(0)
+
+    # =============================================
+    # Sequential (single-docker) path
     pbar = tqdm(total=len(tests))
     num_workers = args.eval_num_workers
     logger.info(f'Using {num_workers} workers for evaluation.')
